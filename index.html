@@ -587,6 +587,15 @@
             showStatus('กำลังสแกน... โปรดส่องกล้องไปที่ Barcode/QR Code', 'info');
         }
 
+        // ทดสอบ Scanner
+        function testScan() {
+            // ทดสอบด้วยรหัสจากภาพที่คุณส่งมา
+            const testBarcode = "8850188210300";
+            document.getElementById('productCode').value = testBarcode;
+            showStatus('ทดสอบ: ใส่รหัส ' + testBarcode + ' แล้ว', 'success');
+            document.getElementById('productName').focus();
+        }
+
         // หยุดสแกน
         function stopScanner() {
             if (scanner && isScanning) {
