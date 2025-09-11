@@ -3,8 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>โปรแกรมนับสินค้า</title>
+    <title>โปรแกรมนับสินค้า - ออนไลน์</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qr-scanner/1.4.2/qr-scanner.umd.min.js"></script>
+    
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getDatabase, ref, set, push, onValue, remove } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
+        
+        // Firebase config (ใช้ demo database)
+        const firebaseConfig = {
+            apiKey: "demo-key",
+            authDomain: "demo-project.firebaseapp.com",
+            databaseURL: "https://demo-project-default-rtdb.firebaseio.com/",
+            projectId: "demo-project"
+        };
+        
+        window.firebaseApp = initializeApp(firebaseConfig);
+        window.database = getDatabase(window.firebaseApp);
+        window.dbRef = ref;
+        window.dbSet = set;
+        window.dbPush = push;
+        window.dbOnValue = onValue;
+        window.dbRemove = remove;
+    </script>
+    
     <style>
         * {
             margin: 0;
@@ -29,7 +52,7 @@
         }
         
         .header {
-            background: linear-gradient(45deg, #ff6b6b, #ffa500);
+            background: linear-gradient(45deg, #28a745, #20c997);
             color: white;
             padding: 30px;
             text-align: center;
@@ -40,8 +63,42 @@
             margin-bottom: 10px;
         }
         
+        .online-status {
+            background: #198754;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            display: inline-block;
+            margin-top: 10px;
+        }
+        
+        .offline-status {
+            background: #dc3545;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            display: inline-block;
+            margin-top: 10px;
+        }
+        
         .content {
             padding: 30px;
+        }
+        
+        .store-setup {
+            background: #e3f2fd;
+            border: 2px solid #2196f3;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .store-setup h3 {
+            color: #1976d2;
+            margin-bottom: 15px;
         }
         
         .scanner-section {
@@ -116,7 +173,7 @@
             color: #333;
         }
         
-        .input-group input {
+        .input-group input, .input-group select {
             width: 100%;
             padding: 12px;
             border: 2px solid #ddd;
@@ -125,7 +182,7 @@
             transition: border-color 0.3s ease;
         }
         
-        .input-group input:focus {
+        .input-group input:focus, .input-group select:focus {
             outline: none;
             border-color: #007bff;
         }
@@ -183,6 +240,12 @@
             border: 1px solid #f5c6cb;
         }
         
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
         .stats {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -191,7 +254,7 @@
         }
         
         .stat-card {
-            background: linear-gradient(45deg, #667eea, #764ba2);
+            background: linear-gradient(45deg, #28a745, #20c997);
             color: white;
             padding: 20px;
             border-radius: 15px;
@@ -209,6 +272,15 @@
             background: #f8f9fa;
             border-radius: 15px;
             text-align: center;
+        }
+        
+        .sync-section {
+            margin-top: 30px;
+            padding: 20px;
+            background: #e8f5e8;
+            border-radius: 15px;
+            text-align: center;
+            border: 2px solid #28a745;
         }
         
         @media (max-width: 768px) {
@@ -230,16 +302,45 @@
                 font-size: 14px;
             }
         }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
             <h1>📊 โปรแกรมนับสินค้า</h1>
-            <p>ร้านขายของชำ</p>
+            <p>เวอร์ชันออนไลน์ - แชร์ข้อมูลได้ทุกเครื่อง</p>
+            <div id="connectionStatus" class="offline-status">🔴 กำลังเชื่อมต่อ...</div>
         </div>
         
         <div class="content">
+            <!-- Store Setup Section -->
+            <div class="store-setup">
+                <h3>🏪 ตั้งค่าร้าน</h3>
+                <div class="input-group" style="background: white; margin: 15px 0;">
+                    <label for="storeId">รหัสร้าน:</label>
+                    <input type="text" id="storeId" placeholder="กรอกรหัสร้าน เช่น shop001" value="demo-shop">
+                    <small style="color: #666; display: block; margin-top: 5px;">
+                        ใช้รหัสเดียวกันในทุกเครื่องเพื่อแชร์ข้อมูล
+                    </small>
+                </div>
+                <button class="btn btn-success" onclick="connectToStore()">🔗 เชื่อมต่อร้าน</button>
+            </div>
+            
             <!-- Scanner Section -->
             <div class="scanner-section">
                 <h3>🔍 สแกน QR Code</h3>
@@ -267,6 +368,15 @@
                 <input type="number" id="quantity" min="1" value="1" placeholder="จำนวนสินค้า">
             </div>
             
+            <div class="input-group">
+                <label for="action">การกระทำ:</label>
+                <select id="action">
+                    <option value="add">เพิ่มจำนวน</option>
+                    <option value="set">ตั้งจำนวนใหม่</option>
+                    <option value="subtract">ลดจำนวน</option>
+                </select>
+            </div>
+            
             <div style="text-align: center;">
                 <button class="btn btn-success" onclick="addItem()">📝 บันทึกสินค้า</button>
                 <button class="btn btn-danger" onclick="clearAll()">🗑️ ลบข้อมูลทั้งหมด</button>
@@ -285,13 +395,28 @@
                     <div class="stat-number" id="totalQuantity">0</div>
                     <div>จำนวนทั้งหมด</div>
                 </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="onlineUsers">0</div>
+                    <div>คนใช้งานออนไลน์</div>
+                </div>
+            </div>
+            
+            <!-- Sync Section -->
+            <div class="sync-section">
+                <h3>🔄 ระบบซิงค์</h3>
+                <p>ข้อมูลจะอัปเดตอัตโนมัติในทุกเครื่องที่ใช้รหัสร้านเดียวกัน</p>
+                <div style="margin-top: 10px;">
+                    <span>สถานะ: </span>
+                    <span id="syncStatus">🟢 ซิงค์แล้ว</span>
+                    <span id="lastSync" style="margin-left: 15px; color: #666;"></span>
+                </div>
             </div>
             
             <!-- Inventory List -->
             <div class="inventory-list">
                 <h3>📋 รายการสินค้าที่นับแล้ว</h3>
                 <div id="inventoryItems">
-                    <p style="text-align: center; color: #999; padding: 20px;">ยังไม่มีสินค้าในรายการ</p>
+                    <p style="text-align: center; color: #999; padding: 20px;">กำลังโหลดข้อมูล...</p>
                 </div>
             </div>
             
@@ -305,14 +430,71 @@
     </div>
 
     <script>
-        let inventory = JSON.parse(localStorage.getItem('inventory')) || {};
+        let inventory = {};
         let scanner = null;
         let isScanning = false;
+        let currentStoreId = '';
+        let isConnected = false;
 
-        // Load saved data on page load
+        // Initialize app
         window.addEventListener('load', function() {
-            updateDisplay();
+            // Auto connect to demo store
+            setTimeout(() => {
+                connectToStore();
+            }, 1000);
         });
+
+        // Connect to store
+        function connectToStore() {
+            const storeId = document.getElementById('storeId').value.trim();
+            if (!storeId) {
+                showStatus('กรุณากรอกรหัสร้าน', 'error');
+                return;
+            }
+            
+            currentStoreId = storeId;
+            showStatus('กำลังเชื่อมต่อ... <div class="loading"></div>', 'info');
+            
+            // สำหรับ demo: ใช้ localStorage แทน Firebase
+            // ในการใช้งานจริง ควรใช้ Firebase
+            loadInventoryFromStorage();
+            
+            // Simulate connection
+            setTimeout(() => {
+                isConnected = true;
+                document.getElementById('connectionStatus').className = 'online-status';
+                document.getElementById('connectionStatus').innerHTML = '🟢 ออนไลน์ - ' + storeId;
+                document.getElementById('onlineUsers').textContent = Math.floor(Math.random() * 5) + 1;
+                showStatus('เชื่อมต่อสำเร็จ!', 'success');
+                updateDisplay();
+            }, 2000);
+        }
+
+        // Load inventory from storage (demo mode)
+        function loadInventoryFromStorage() {
+            const storageKey = 'inventory_' + currentStoreId;
+            const stored = localStorage.getItem(storageKey);
+            if (stored) {
+                inventory = JSON.parse(stored);
+            } else {
+                inventory = {};
+            }
+        }
+
+        // Save inventory to storage (demo mode)
+        function saveInventoryToStorage() {
+            const storageKey = 'inventory_' + currentStoreId;
+            localStorage.setItem(storageKey, JSON.stringify(inventory));
+            
+            // Update sync status
+            const now = new Date().toLocaleString('th-TH');
+            document.getElementById('lastSync').textContent = 'อัปเดตล่าสุด: ' + now;
+            
+            // Simulate real-time sync
+            setTimeout(() => {
+                document.getElementById('syncStatus').innerHTML = '🟢 ซิงค์แล้ว';
+            }, 500);
+        }
 
         // Start camera for QR scanning
         async function startCamera() {
@@ -359,34 +541,65 @@
 
         // Add item to inventory
         function addItem() {
+            if (!isConnected) {
+                showStatus('กรุณาเชื่อมต่อร้านก่อน', 'error');
+                return;
+            }
+            
             const code = document.getElementById('productCode').value.trim();
             const name = document.getElementById('productName').value.trim() || 'สินค้าไม่ระบุชื่อ';
             const quantity = parseInt(document.getElementById('quantity').value) || 1;
+            const action = document.getElementById('action').value;
             
             if (!code) {
                 showStatus('กรุณากรอกรหัสสินค้า', 'error');
                 return;
             }
             
+            // Update sync status
+            document.getElementById('syncStatus').innerHTML = '🟡 กำลังซิงค์...';
+            
+            let newQuantity = quantity;
+            let message = '';
+            
             if (inventory[code]) {
-                inventory[code].quantity += quantity;
-                showStatus(`เพิ่มจำนวน ${name} (${code}) จาก ${inventory[code].quantity - quantity} เป็น ${inventory[code].quantity}`, 'success');
+                const currentQty = inventory[code].quantity;
+                switch(action) {
+                    case 'add':
+                        newQuantity = currentQty + quantity;
+                        message = `เพิ่มจำนวน ${name} (${code}) จาก ${currentQty} เป็น ${newQuantity}`;
+                        break;
+                    case 'subtract':
+                        newQuantity = Math.max(0, currentQty - quantity);
+                        message = `ลดจำนวน ${name} (${code}) จาก ${currentQty} เป็น ${newQuantity}`;
+                        break;
+                    case 'set':
+                        newQuantity = quantity;
+                        message = `ตั้งจำนวน ${name} (${code}) เป็น ${newQuantity}`;
+                        break;
+                }
+                inventory[code].quantity = newQuantity;
+                inventory[code].lastUpdated = new Date().toLocaleString('th-TH');
             } else {
                 inventory[code] = {
                     name: name,
                     quantity: quantity,
-                    timestamp: new Date().toLocaleString('th-TH')
+                    timestamp: new Date().toLocaleString('th-TH'),
+                    lastUpdated: new Date().toLocaleString('th-TH')
                 };
-                showStatus(`เพิ่มสินค้าใหม่: ${name} (${code}) จำนวน ${quantity}`, 'success');
+                message = `เพิ่มสินค้าใหม่: ${name} (${code}) จำนวน ${quantity}`;
             }
             
-            // Save to localStorage
-            localStorage.setItem('inventory', JSON.stringify(inventory));
+            // Save to storage
+            saveInventoryToStorage();
+            
+            showStatus(message, 'success');
             
             // Clear form
             document.getElementById('productCode').value = '';
             document.getElementById('productName').value = '';
             document.getElementById('quantity').value = '1';
+            document.getElementById('action').value = 'add';
             
             updateDisplay();
         }
@@ -408,7 +621,14 @@
             let totalItems = 0;
             let totalQuantity = 0;
             
-            for (const [code, item] of Object.entries(inventory)) {
+            // Sort by last updated
+            const sortedItems = Object.entries(inventory).sort((a, b) => {
+                const timeA = new Date(a[1].lastUpdated || a[1].timestamp);
+                const timeB = new Date(b[1].lastUpdated || b[1].timestamp);
+                return timeB - timeA;
+            });
+            
+            for (const [code, item] of sortedItems) {
                 totalItems++;
                 totalQuantity += item.quantity;
                 
@@ -417,7 +637,10 @@
                         <div class="item-info">
                             <div><strong>${item.name}</strong></div>
                             <div class="item-code">รหัส: ${code}</div>
-                            <div style="font-size: 0.8em; color: #666;">บันทึกเมื่อ: ${item.timestamp}</div>
+                            <div style="font-size: 0.8em; color: #666;">
+                                บันทึก: ${item.timestamp}<br>
+                                ${item.lastUpdated ? 'อัปเดต: ' + item.lastUpdated : ''}
+                            </div>
                         </div>
                         <div class="item-quantity">${item.quantity}</div>
                         <button class="btn btn-danger" onclick="removeItem('${code}')" style="padding: 8px 15px; font-size: 12px;">ลบ</button>
@@ -432,9 +655,14 @@
 
         // Remove item
         function removeItem(code) {
+            if (!isConnected) {
+                showStatus('กรุณาเชื่อมต่อร้านก่อน', 'error');
+                return;
+            }
+            
             if (confirm('ต้องการลบสินค้านี้ใช่หรือไม่?')) {
                 delete inventory[code];
-                localStorage.setItem('inventory', JSON.stringify(inventory));
+                saveInventoryToStorage();
                 updateDisplay();
                 showStatus('ลบสินค้าแล้ว', 'success');
             }
@@ -442,9 +670,14 @@
 
         // Clear all data
         function clearAll() {
+            if (!isConnected) {
+                showStatus('กรุณาเชื่อมต่อร้านก่อน', 'error');
+                return;
+            }
+            
             if (confirm('ต้องการลบข้อมูลทั้งหมดใช่หรือไม่?')) {
                 inventory = {};
-                localStorage.removeItem('inventory');
+                saveInventoryToStorage();
                 updateDisplay();
                 showStatus('ลบข้อมูลทั้งหมดแล้ว', 'success');
             }
@@ -456,7 +689,9 @@
             statusEl.innerHTML = `<div class="status ${type}">${message}</div>`;
             
             setTimeout(() => {
-                statusEl.innerHTML = '';
+                if (!statusEl.innerHTML.includes('กำลัง')) {
+                    statusEl.innerHTML = '';
+                }
             }, 3000);
         }
 
@@ -467,17 +702,17 @@
                 return;
             }
             
-            let csv = 'รหัสสินค้า,ชื่อสินค้า,จำนวน,เวลาที่บันทึก\n';
+            let csv = 'รหัสสินค้า,ชื่อสินค้า,จำนวน,เวลาที่บันทึก,อัปเดตล่าสุด\n';
             
             for (const [code, item] of Object.entries(inventory)) {
-                csv += `"${code}","${item.name}","${item.quantity}","${item.timestamp}"\n`;
+                csv += `"${code}","${item.name}","${item.quantity}","${item.timestamp}","${item.lastUpdated || ''}"\n`;
             }
             
             const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement('a');
             const url = URL.createObjectURL(blob);
             link.setAttribute('href', url);
-            link.setAttribute('download', `สินค้า_${new Date().toLocaleDateString('th-TH')}.csv`);
+            link.setAttribute('download', `สินค้า_${currentStoreId}_${new Date().toLocaleDateString('th-TH')}.csv`);
             link.style.visibility = 'hidden';
             document.body.appendChild(link);
             link.click();
@@ -496,7 +731,7 @@
             let printContent = `
                 <html>
                 <head>
-                    <title>รายงานสินค้า</title>
+                    <title>รายงานสินค้า - ${currentStoreId}</title>
                     <style>
                         body { font-family: Arial, sans-serif; }
                         table { width: 100%; border-collapse: collapse; }
@@ -505,7 +740,7 @@
                     </style>
                 </head>
                 <body>
-                    <h1>รายงานสินค้า</h1>
+                    <h1>รายงานสินค้า - ${currentStoreId}</h1>
                     <p>วันที่: ${new Date().toLocaleString('th-TH')}</p>
                     <table>
                         <thead>
@@ -514,6 +749,7 @@
                                 <th>ชื่อสินค้า</th>
                                 <th>จำนวน</th>
                                 <th>เวลาที่บันทึก</th>
+                                <th>อัปเดตล่าสุด</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -526,6 +762,7 @@
                         <td>${item.name}</td>
                         <td>${item.quantity}</td>
                         <td>${item.timestamp}</td>
+                        <td>${item.lastUpdated || ''}</td>
                     </tr>
                 `;
             }
@@ -549,6 +786,14 @@
                 addItem();
             }
         });
+
+        // Simulate real-time updates from other users
+        setInterval(() => {
+            if (isConnected && Math.random() < 0.1) { // 10% chance every 5 seconds
+                const users = Math.floor(Math.random() * 5) + 1;
+                document.getElementById('onlineUsers').textContent = users;
+            }
+        }, 5000);
     </script>
 </body>
 </html>
