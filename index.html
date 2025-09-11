@@ -4,29 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>โปรแกรมนับสินค้า - ออนไลน์</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qr-scanner/1.4.2/qr-scanner.umd.min.js"></script>
     
-    <!-- Firebase SDKs -->
-    <script type="module">
-        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-        import { getDatabase, ref, set, push, onValue, remove } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
-        
-        // Firebase config (ใช้ demo database)
-        const firebaseConfig = {
-            apiKey: "demo-key",
-            authDomain: "demo-project.firebaseapp.com",
-            databaseURL: "https://demo-project-default-rtdb.firebaseio.com/",
-            projectId: "demo-project"
-        };
-        
-        window.firebaseApp = initializeApp(firebaseConfig);
-        window.database = getDatabase(window.firebaseApp);
-        window.dbRef = ref;
-        window.dbSet = set;
-        window.dbPush = push;
-        window.dbOnValue = onValue;
-        window.dbRemove = remove;
-    </script>
+    <!-- เปลี่ยนไปใช้ html5-qrcode แทน เพื่อรองรับดีกว่า -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     
     <style>
         * {
@@ -110,11 +90,10 @@
             border: 2px dashed #007bff;
         }
         
-        #video {
+        #qr-reader {
             width: 100%;
             max-width: 400px;
-            border-radius: 10px;
-            margin: 20px 0;
+            margin: 20px auto;
             display: none;
         }
         
@@ -343,11 +322,11 @@
             
             <!-- Scanner Section -->
             <div class="scanner-section">
-                <h3>🔍 สแกน QR Code</h3>
-                <video id="video"></video>
+                <h3>🔍 สแกน Barcode/QR Code</h3>
+                <div id="qr-reader"></div>
                 <div>
-                    <button class="btn btn-primary" onclick="startCamera()">เปิดกล้อง</button>
-                    <button class="btn btn-danger" onclick="stopCamera()" style="display: none;" id="stopBtn">หยุดกล้อง</button>
+                    <button class="btn btn-primary" onclick="startScanner()" id="startBtn">เปิดกล้อง</button>
+                    <button class="btn btn-danger" onclick="stopScanner()" style="display: none;" id="stopBtn">หยุดกล้อง</button>
                 </div>
                 <p style="margin-top: 10px; color: #666;">หรือใส่รหัสสินค้าด้วยตนเอง</p>
             </div>
@@ -355,11 +334,11 @@
             <!-- Manual Input -->
             <div class="input-group">
                 <label for="productCode">รหัสสินค้า:</label>
-                <input type="text" id="productCode" placeholder="กรอกรหัสสินค้าหรือสแกน QR Code">
+                <input type="text" id="productCode" placeholder="กรอกรหัสสินค้าหรือสแกน Barcode">
             </div>
             
             <div class="input-group">
-                <label for="productName">ชื่อสินค้า (ไม่บังคับ):</label>
+                <label for="productName">ชื่อสินค้า:</label>
                 <input type="text" id="productName" placeholder="ชื่อสินค้า">
             </div>
             
@@ -436,8 +415,104 @@
         let currentStoreId = '';
         let isConnected = false;
 
+        // เปลี่ยนไปใช้ IndexedDB สำหรับการซิงค์ข้อมูลที่ดีกว่า
+        const DB_NAME = 'InventoryDB';
+        const DB_VERSION = 1;
+        let db = null;
+
+        // เริ่มต้นฐานข้อมูล
+        function initDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => {
+                    db = request.result;
+                    resolve(db);
+                };
+                
+                request.onupgradeneeded = (event) => {
+                    const database = event.target.result;
+                    if (!database.objectStoreNames.contains('inventory')) {
+                        const store = database.createObjectStore('inventory', { keyPath: 'storeId' });
+                        store.createIndex('timestamp', 'timestamp', { unique: false });
+                    }
+                };
+            });
+        }
+
+        // บันทึกข้อมูลลง IndexedDB
+        function saveInventoryToDB() {
+            if (!db || !currentStoreId) return;
+            
+            const transaction = db.transaction(['inventory'], 'readwrite');
+            const store = transaction.objectStore('inventory');
+            
+            const data = {
+                storeId: currentStoreId,
+                inventory: inventory,
+                timestamp: new Date().toISOString(),
+                lastUpdate: new Date().toLocaleString('th-TH')
+            };
+            
+            store.put(data);
+            
+            // อัปเดตสถานะ
+            document.getElementById('lastSync').textContent = 'อัปเดตล่าสุด: ' + data.lastUpdate;
+            document.getElementById('syncStatus').innerHTML = '🟢 ซิงค์แล้ว';
+            
+            // ส่งข้อมูลไปยัง LocalStorage ด้วย (เพื่อการซิงค์ระหว่างแท็บ)
+            const storageKey = 'inventory_' + currentStoreId;
+            localStorage.setItem(storageKey, JSON.stringify(data));
+            
+            // แจ้งให้แท็บอื่นๆ อัปเดต
+            localStorage.setItem('inventory_update_' + currentStoreId, Date.now().toString());
+        }
+
+        // โหลดข้อมูลจาก IndexedDB
+        function loadInventoryFromDB() {
+            if (!db || !currentStoreId) return Promise.resolve();
+            
+            return new Promise((resolve) => {
+                const transaction = db.transaction(['inventory'], 'readonly');
+                const store = transaction.objectStore('inventory');
+                const request = store.get(currentStoreId);
+                
+                request.onsuccess = () => {
+                    if (request.result) {
+                        inventory = request.result.inventory || {};
+                        document.getElementById('lastSync').textContent = 'อัปเดตล่าสุด: ' + request.result.lastUpdate;
+                    } else {
+                        inventory = {};
+                    }
+                    resolve();
+                };
+                
+                request.onerror = () => {
+                    inventory = {};
+                    resolve();
+                };
+            });
+        }
+
+        // ติดตามการอัปเดตจากแท็บอื่น
+        window.addEventListener('storage', (e) => {
+            if (e.key && e.key.startsWith('inventory_update_' + currentStoreId)) {
+                // โหลดข้อมูลใหม่จาก localStorage
+                const storageKey = 'inventory_' + currentStoreId;
+                const stored = localStorage.getItem(storageKey);
+                if (stored) {
+                    const data = JSON.parse(stored);
+                    inventory = data.inventory || {};
+                    updateDisplay();
+                    showStatus('ข้อมูลได้รับการอัปเดตจากเครื่องอื่น', 'info');
+                }
+            }
+        });
+
         // Initialize app
-        window.addEventListener('load', function() {
+        window.addEventListener('load', async function() {
+            await initDB();
             // Auto connect to demo store
             setTimeout(() => {
                 connectToStore();
@@ -445,7 +520,7 @@
         });
 
         // Connect to store
-        function connectToStore() {
+        async function connectToStore() {
             const storeId = document.getElementById('storeId').value.trim();
             if (!storeId) {
                 showStatus('กรุณากรอกรหัสร้าน', 'error');
@@ -455,9 +530,8 @@
             currentStoreId = storeId;
             showStatus('กำลังเชื่อมต่อ... <div class="loading"></div>', 'info');
             
-            // สำหรับ demo: ใช้ localStorage แทน Firebase
-            // ในการใช้งานจริง ควรใช้ Firebase
-            loadInventoryFromStorage();
+            // โหลดข้อมูลจากฐานข้อมูล
+            await loadInventoryFromDB();
             
             // Simulate connection
             setTimeout(() => {
@@ -470,70 +544,65 @@
             }, 2000);
         }
 
-        // Load inventory from storage (demo mode)
-        function loadInventoryFromStorage() {
-            const storageKey = 'inventory_' + currentStoreId;
-            const stored = localStorage.getItem(storageKey);
-            if (stored) {
-                inventory = JSON.parse(stored);
-            } else {
-                inventory = {};
-            }
-        }
-
-        // Save inventory to storage (demo mode)
-        function saveInventoryToStorage() {
-            const storageKey = 'inventory_' + currentStoreId;
-            localStorage.setItem(storageKey, JSON.stringify(inventory));
-            
-            // Update sync status
-            const now = new Date().toLocaleString('th-TH');
-            document.getElementById('lastSync').textContent = 'อัปเดตล่าสุด: ' + now;
-            
-            // Simulate real-time sync
-            setTimeout(() => {
-                document.getElementById('syncStatus').innerHTML = '🟢 ซิงค์แล้ว';
-            }, 500);
-        }
-
-        // Start camera for QR scanning
-        async function startCamera() {
-            try {
-                const video = document.getElementById('video');
-                const startBtn = document.querySelector('.btn-primary');
-                const stopBtn = document.getElementById('stopBtn');
-                
-                video.style.display = 'block';
-                startBtn.style.display = 'none';
-                stopBtn.style.display = 'inline-block';
-                
-                scanner = new QrScanner(video, result => {
-                    document.getElementById('productCode').value = result.data;
-                    showStatus('สแกน QR Code สำเร็จ: ' + result.data, 'success');
-                    stopCamera();
-                });
-                
-                await scanner.start();
-                isScanning = true;
-                showStatus('กำลังสแกน QR Code...', 'success');
-            } catch (error) {
-                showStatus('ไม่สามารถเปิดกล้องได้: ' + error.message, 'error');
-            }
-        }
-
-        // Stop camera
-        function stopCamera() {
-            if (scanner) {
-                scanner.stop();
-                scanner.destroy();
-                scanner = null;
-            }
-            
-            const video = document.getElementById('video');
-            const startBtn = document.querySelector('.btn-primary');
+        // เริ่มสแกน (ใช้ html5-qrcode)
+        function startScanner() {
+            const startBtn = document.getElementById('startBtn');
             const stopBtn = document.getElementById('stopBtn');
+            const readerDiv = document.getElementById('qr-reader');
             
-            video.style.display = 'none';
+            readerDiv.style.display = 'block';
+            startBtn.style.display = 'none';
+            stopBtn.style.display = 'inline-block';
+            
+            // สร้าง scanner ใหม่
+            scanner = new Html5Qrcode("qr-reader");
+            
+            const config = {
+                fps: 10,
+                qrbox: { width: 250, height: 250 },
+                aspectRatio: 1.0
+            };
+            
+            scanner.start(
+                { facingMode: "environment" }, // ใช้กล้องหลัง
+                config,
+                (decodedText, decodedResult) => {
+                    // สแกนสำเร็จ
+                    document.getElementById('productCode').value = decodedText;
+                    showStatus('สแกนสำเร็จ: ' + decodedText, 'success');
+                    stopScanner();
+                    
+                    // เน้นช่องชื่อสินค้าเพื่อให้กรอก
+                    document.getElementById('productName').focus();
+                },
+                (errorMessage) => {
+                    // ไม่ต้องแสดง error ตลอดเวลา
+                }
+            ).catch(err => {
+                showStatus('ไม่สามารถเปิดกล้องได้: ' + err, 'error');
+                stopScanner();
+            });
+            
+            isScanning = true;
+            showStatus('กำลังสแกน... โปรดส่องกล้องไปที่ Barcode/QR Code', 'info');
+        }
+
+        // หยุดสแกน
+        function stopScanner() {
+            if (scanner && isScanning) {
+                scanner.stop().then(() => {
+                    scanner.clear();
+                    scanner = null;
+                }).catch(err => {
+                    console.log('Error stopping scanner:', err);
+                });
+            }
+            
+            const startBtn = document.getElementById('startBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            const readerDiv = document.getElementById('qr-reader');
+            
+            readerDiv.style.display = 'none';
             startBtn.style.display = 'inline-block';
             stopBtn.style.display = 'none';
             isScanning = false;
@@ -547,12 +616,17 @@
             }
             
             const code = document.getElementById('productCode').value.trim();
-            const name = document.getElementById('productName').value.trim() || 'สินค้าไม่ระบุชื่อ';
+            const name = document.getElementById('productName').value.trim();
             const quantity = parseInt(document.getElementById('quantity').value) || 1;
             const action = document.getElementById('action').value;
             
             if (!code) {
                 showStatus('กรุณากรอกรหัสสินค้า', 'error');
+                return;
+            }
+            
+            if (!name) {
+                showStatus('กรุณากรอกชื่อสินค้า', 'error');
                 return;
             }
             
@@ -579,6 +653,7 @@
                         break;
                 }
                 inventory[code].quantity = newQuantity;
+                inventory[code].name = name; // อัปเดตชื่อ
                 inventory[code].lastUpdated = new Date().toLocaleString('th-TH');
             } else {
                 inventory[code] = {
@@ -590,8 +665,8 @@
                 message = `เพิ่มสินค้าใหม่: ${name} (${code}) จำนวน ${quantity}`;
             }
             
-            // Save to storage
-            saveInventoryToStorage();
+            // Save to database
+            saveInventoryToDB();
             
             showStatus(message, 'success');
             
@@ -662,7 +737,7 @@
             
             if (confirm('ต้องการลบสินค้านี้ใช่หรือไม่?')) {
                 delete inventory[code];
-                saveInventoryToStorage();
+                saveInventoryToDB();
                 updateDisplay();
                 showStatus('ลบสินค้าแล้ว', 'success');
             }
@@ -677,7 +752,7 @@
             
             if (confirm('ต้องการลบข้อมูลทั้งหมดใช่หรือไม่?')) {
                 inventory = {};
-                saveInventoryToStorage();
+                saveInventoryToDB();
                 updateDisplay();
                 showStatus('ลบข้อมูลทั้งหมดแล้ว', 'success');
             }
@@ -692,7 +767,7 @@
                 if (!statusEl.innerHTML.includes('กำลัง')) {
                     statusEl.innerHTML = '';
                 }
-            }, 3000);
+            }, 5000);
         }
 
         // Export data to CSV
@@ -783,7 +858,18 @@
         // Enable Enter key for adding items
         document.addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
-                addItem();
+                // ถ้าอยู่ในช่องรหัสสินค้า ให้ไปที่ช่องชื่อสินค้า
+                if (document.activeElement.id === 'productCode') {
+                    document.getElementById('productName').focus();
+                }
+                // ถ้าอยู่ในช่องชื่อสินค้า ให้ไปที่ช่องจำนวน
+                else if (document.activeElement.id === 'productName') {
+                    document.getElementById('quantity').focus();
+                }
+                // ถ้าอยู่ในช่องจำนวน ให้บันทึกเลย
+                else if (document.activeElement.id === 'quantity') {
+                    addItem();
+                }
             }
         });
 
@@ -794,6 +880,26 @@
                 document.getElementById('onlineUsers').textContent = users;
             }
         }, 5000);
+
+        // เช็คการอัปเดตจากเครื่องอื่นทุก 30 วินาที
+        setInterval(() => {
+            if (isConnected && currentStoreId) {
+                const storageKey = 'inventory_' + currentStoreId;
+                const stored = localStorage.getItem(storageKey);
+                if (stored) {
+                    const data = JSON.parse(stored);
+                    const currentTime = new Date(data.timestamp || 0);
+                    const lastLocalUpdate = new Date(document.getElementById('lastSync').textContent.replace('อัปเดตล่าสุด: ', '') || 0);
+                    
+                    if (currentTime > lastLocalUpdate) {
+                        inventory = data.inventory || {};
+                        updateDisplay();
+                        document.getElementById('lastSync').textContent = 'อัปเดตล่าสุด: ' + data.lastUpdate;
+                        showStatus('📡 ซิงค์ข้อมูลจากเครื่องอื่นแล้ว', 'info');
+                    }
+                }
+            }
+        }, 30000); // ทุก 30 วินาที
     </script>
 </body>
 </html>
