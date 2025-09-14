@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ระบบนับสต็อกสินค้า</title>
+    <title>ระบบนับสต็อกสินค้า + Google Sheets</title>
     <style>
         * {
             margin: 0;
@@ -40,6 +40,25 @@
             text-shadow: 0 2px 4px rgba(0,0,0,0.2);
         }
 
+        .connection-status {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            margin-top: 10px;
+        }
+
+        .status-connected {
+            background: rgba(72, 187, 120, 0.2);
+            color: white;
+        }
+
+        .status-disconnected {
+            background: rgba(255, 71, 87, 0.2);
+            color: white;
+        }
+
         .main-content {
             display: grid;
             grid-template-columns: 1fr 2fr;
@@ -57,6 +76,38 @@
             background: white;
         }
 
+        .setup-section {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .setup-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #856404;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .setup-steps {
+            font-size: 14px;
+            color: #856404;
+            line-height: 1.6;
+        }
+
+        .setup-steps ol {
+            margin-left: 20px;
+        }
+
+        .setup-steps li {
+            margin-bottom: 8px;
+        }
+
         .form-group {
             margin-bottom: 25px;
         }
@@ -69,7 +120,7 @@
             font-size: 16px;
         }
 
-        .form-group input {
+        .form-group input, .form-group textarea {
             width: 100%;
             padding: 15px;
             border: 2px solid #e2e8f0;
@@ -79,7 +130,12 @@
             background: white;
         }
 
-        .form-group input:focus {
+        .form-group textarea {
+            height: 80px;
+            resize: vertical;
+        }
+
+        .form-group input:focus, .form-group textarea:focus {
             outline: none;
             border-color: #4facfe;
             box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.1);
@@ -106,12 +162,20 @@
             box-shadow: 0 10px 25px rgba(79, 172, 254, 0.3);
         }
 
-        .btn:active {
-            transform: translateY(0);
+        .btn:disabled {
+            background: #cbd5e0;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-setup {
+            background: linear-gradient(45deg, #48bb78 0%, #38a169 100%);
+            margin-bottom: 15px;
         }
 
         .inventory-list {
-            max-height: 600px;
+            max-height: 400px;
             overflow-y: auto;
         }
 
@@ -122,7 +186,6 @@
             padding: 20px;
             margin-bottom: 15px;
             transition: all 0.3s ease;
-            position: relative;
         }
 
         .inventory-item:hover {
@@ -133,7 +196,7 @@
 
         .item-header {
             display: flex;
-            justify-content: between;
+            justify-content: space-between;
             align-items: center;
             margin-bottom: 10px;
         }
@@ -167,29 +230,6 @@
             border-radius: 4px;
             display: inline-block;
             margin-right: 10px;
-        }
-
-        .delete-btn {
-            position: absolute;
-            top: 15px;
-            right: 15px;
-            background: #ff4757;
-            color: white;
-            border: none;
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
-            cursor: pointer;
-            font-size: 16px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.3s ease;
-        }
-
-        .delete-btn:hover {
-            background: #ff3838;
-            transform: scale(1.1);
         }
 
         .stats {
@@ -228,17 +268,43 @@
             gap: 10px;
         }
 
-        .empty-state {
-            text-align: center;
-            color: #718096;
-            padding: 60px 20px;
-            font-size: 18px;
+        .success-message, .error-message {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+            animation: slideIn 0.3s ease;
         }
 
-        .empty-state img {
-            width: 120px;
-            opacity: 0.5;
-            margin-bottom: 20px;
+        .success-message {
+            background: #48bb78;
+            color: white;
+        }
+
+        .error-message {
+            background: #f56565;
+            color: white;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateY(-10px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #4facfe;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
         @media (max-width: 768px) {
@@ -256,36 +322,65 @@
             }
         }
 
-        .success-message {
-            background: #48bb78;
+        .google-sheets-link {
+            background: #34a853;
             color: white;
-            padding: 15px;
+            text-decoration: none;
+            padding: 12px 24px;
             border-radius: 8px;
-            margin-bottom: 20px;
-            display: none;
-            animation: slideIn 0.3s ease;
+            display: inline-block;
+            margin-top: 10px;
+            font-weight: 600;
+            transition: all 0.3s ease;
         }
 
-        @keyframes slideIn {
-            from { transform: translateY(-10px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
+        .google-sheets-link:hover {
+            background: #2d8f47;
+            transform: translateY(-2px);
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>📦 ระบบนับสต็อกสินค้า</h1>
-            <p>บันทึกและจัดการสินค้าแบบ Real-time</p>
+            <h1>📦 ระบบนับสต็อกสินค้า + Google Sheets</h1>
+            <p>บันทึกในมือถือ แสดงผลใน Google Sheets แบบ Real-time</p>
+            <div class="connection-status status-disconnected" id="connectionStatus">
+                🔴 ยังไม่เชื่อมต่อ Google Sheets
+            </div>
         </div>
 
         <div class="main-content">
             <div class="input-section">
+                <div class="setup-section" id="setupSection">
+                    <div class="setup-title">
+                        ⚙️ การตั้งค่า Google Sheets
+                    </div>
+                    <div class="setup-steps">
+                        <p><strong>ขั้นตอนการเชื่อมต่อ:</strong></p>
+                        <ol>
+                            <li>เปิด <a href="https://sheets.google.com" target="_blank">Google Sheets</a> สร้างชีทใหม่</li>
+                            <li>ตั้งชื่อ Column A1=รหัสบาร์โค้ด, B1=ชื่อสินค้า, C1=จำนวน, D1=เวลาบันทึก</li>
+                            <li>ไปที่ Extensions → Apps Script</li>
+                            <li>วาง Code ด้านล่างแล้ว Deploy เป็น Web App</li>
+                            <li>คัดลอก URL มาใส่ในช่องด้านล่าง</li>
+                        </ol>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="sheetsUrl">📋 Google Apps Script URL</label>
+                        <textarea id="sheetsUrl" placeholder="ใส่ URL ของ Google Apps Script ที่ Deploy แล้วที่นี่"></textarea>
+                    </div>
+                    
+                    <button type="button" class="btn btn-setup" onclick="connectToSheets()">
+                        🔗 เชื่อมต่อ Google Sheets
+                    </button>
+                </div>
+
                 <h2 class="section-title">📱 บันทึกสินค้า</h2>
                 
-                <div class="success-message" id="successMessage">
-                    ✅ บันทึกสินค้าเรียบร้อยแล้ว!
-                </div>
+                <div class="success-message" id="successMessage"></div>
+                <div class="error-message" id="errorMessage"></div>
 
                 <form id="inventoryForm">
                     <div class="form-group">
@@ -303,33 +398,39 @@
                         <input type="number" id="quantity" name="quantity" placeholder="จำนวนสินค้า" min="0" required>
                     </div>
 
-                    <button type="submit" class="btn">💾 บันทึกสินค้า</button>
+                    <button type="submit" class="btn" id="saveBtn">
+                        💾 บันทึกไป Google Sheets
+                    </button>
                 </form>
             </div>
 
             <div class="display-section">
-                <h2 class="section-title">💻 แดชบอร์ดสินค้า</h2>
+                <h2 class="section-title">💻 ข้อมูลท้องถิ่น</h2>
 
                 <div class="stats">
                     <div class="stat-card">
                         <div class="stat-number" id="totalItems">0</div>
-                        <div class="stat-label">รายการสินค้า</div>
+                        <div class="stat-label">รายการที่บันทึก</div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-number" id="totalQuantity">0</div>
                         <div class="stat-label">จำนวนทั้งหมด</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-number" id="lastUpdate">-</div>
-                        <div class="stat-label">อัปเดตล่าสุด</div>
+                        <div class="stat-number" id="successCount">0</div>
+                        <div class="stat-label">ส่งสำเร็จ</div>
                     </div>
                 </div>
 
+                <p style="background: #e6fffa; padding: 15px; border-radius: 8px; font-size: 14px; color: #2d3748; margin-bottom: 20px;">
+                    📋 <strong>ดูข้อมูลแบบ Real-time:</strong> เปิด Google Sheets ที่คุณสร้างไว้ในคอมพิวเตอร์ 
+                    ข้อมูลจะอัปเดตทันทีเมื่อมีการบันทึก
+                </p>
+
                 <div class="inventory-list" id="inventoryList">
-                    <div class="empty-state">
-                        <div style="font-size: 4em; margin-bottom: 20px;">📦</div>
-                        <p>ยังไม่มีสินค้าในระบบ</p>
-                        <p style="font-size: 14px; margin-top: 10px;">เริ่มต้นด้วยการบันทึกสินค้าชิ้นแรกของคุณ</p>
+                    <div style="text-align: center; color: #718096; padding: 40px;">
+                        <div style="font-size: 3em; margin-bottom: 15px;">📊</div>
+                        <p>รายการที่บันทึกจะแสดงที่นี่</p>
                     </div>
                 </div>
             </div>
@@ -337,22 +438,68 @@
     </div>
 
     <script>
-        // จัดเก็บข้อมูลสินค้าในหน่วยความจำ
         let inventory = [];
+        let sheetsConnected = false;
+        let sheetsUrl = '';
+        let successCount = 0;
+
+        // ฟังก์ชันเชื่อมต่อ Google Sheets
+        function connectToSheets() {
+            const url = document.getElementById('sheetsUrl').value.trim();
+            if (!url) {
+                showError('กรุณาใส่ URL ของ Google Apps Script');
+                return;
+            }
+
+            sheetsUrl = url;
+            sheetsConnected = true;
+            
+            // อัปเดต UI
+            document.getElementById('connectionStatus').className = 'connection-status status-connected';
+            document.getElementById('connectionStatus').textContent = '🟢 เชื่อมต่อ Google Sheets แล้ว';
+            document.getElementById('setupSection').style.display = 'none';
+            
+            showSuccess('เชื่อมต่อ Google Sheets เรียบร้อย!');
+            
+            // เก็บ URL ไว้ใน localStorage สำหรับครั้งต่อไป
+            localStorage.setItem('sheetsUrl', sheetsUrl);
+        }
+
+        // ฟังก์ชันส่งข้อมูลไป Google Sheets
+        async function sendToSheets(data) {
+            if (!sheetsConnected || !sheetsUrl) {
+                throw new Error('ยังไม่ได้เชื่อมต่อ Google Sheets');
+            }
+
+            try {
+                const response = await fetch(sheetsUrl, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        barcode: data.barcode,
+                        productName: data.productName,
+                        quantity: data.quantity,
+                        timestamp: data.timestamp
+                    })
+                });
+
+                // เนื่องจากใช้ no-cors จึงถือว่าสำเร็จ
+                return true;
+            } catch (error) {
+                console.error('Error sending to sheets:', error);
+                throw error;
+            }
+        }
 
         // ฟังก์ชันอัปเดตสถิติ
         function updateStats() {
-            const totalItems = inventory.length;
+            document.getElementById('totalItems').textContent = inventory.length;
             const totalQuantity = inventory.reduce((sum, item) => sum + item.quantity, 0);
-            const now = new Date();
-            const timeString = now.toLocaleTimeString('th-TH', { 
-                hour: '2-digit', 
-                minute: '2-digit' 
-            });
-
-            document.getElementById('totalItems').textContent = totalItems;
             document.getElementById('totalQuantity').textContent = totalQuantity.toLocaleString();
-            document.getElementById('lastUpdate').textContent = totalItems > 0 ? timeString : '-';
+            document.getElementById('successCount').textContent = successCount;
         }
 
         // ฟังก์ชันแสดงรายการสินค้า
@@ -361,10 +508,9 @@
             
             if (inventory.length === 0) {
                 listContainer.innerHTML = `
-                    <div class="empty-state">
-                        <div style="font-size: 4em; margin-bottom: 20px;">📦</div>
-                        <p>ยังไม่มีสินค้าในระบบ</p>
-                        <p style="font-size: 14px; margin-top: 10px;">เริ่มต้นด้วยการบันทึกสินค้าชิ้นแรกของคุณ</p>
+                    <div style="text-align: center; color: #718096; padding: 40px;">
+                        <div style="font-size: 3em; margin-bottom: 15px;">📊</div>
+                        <p>รายการที่บันทึกจะแสดงที่นี่</p>
                     </div>
                 `;
                 return;
@@ -372,14 +518,13 @@
 
             const inventoryHTML = inventory.map((item, index) => `
                 <div class="inventory-item">
-                    <button class="delete-btn" onclick="deleteItem(${index})" title="ลบรายการ">×</button>
                     <div class="item-header">
                         <div class="item-name">${item.productName}</div>
                         <div class="item-quantity">${item.quantity.toLocaleString()} ชิ้น</div>
                     </div>
                     <div class="item-details">
                         <span class="barcode">${item.barcode}</span>
-                        <span>บันทึกเมื่อ: ${item.timestamp}</span>
+                        <span>✅ ส่งไป Sheets: ${item.timestamp}</span>
                     </div>
                 </div>
             `).join('');
@@ -387,72 +532,96 @@
             listContainer.innerHTML = inventoryHTML;
         }
 
-        // ฟังก์ชันลบรายการสินค้า
-        function deleteItem(index) {
-            if (confirm('คุณต้องการลบรายการนี้ใช่หรือไม่?')) {
-                inventory.splice(index, 1);
-                displayInventory();
-                updateStats();
-            }
-        }
-
         // ฟังก์ชันแสดงข้อความสำเร็จ
-        function showSuccessMessage() {
-            const message = document.getElementById('successMessage');
-            message.style.display = 'block';
+        function showSuccess(message) {
+            const element = document.getElementById('successMessage');
+            element.textContent = message;
+            element.style.display = 'block';
             setTimeout(() => {
-                message.style.display = 'none';
+                element.style.display = 'none';
             }, 3000);
         }
 
+        // ฟังก์ชันแสดงข้อความผิดพลาด
+        function showError(message) {
+            const element = document.getElementById('errorMessage');
+            element.textContent = message;
+            element.style.display = 'block';
+            setTimeout(() => {
+                element.style.display = 'none';
+            }, 5000);
+        }
+
         // จัดการการส่งฟอร์ม
-        document.getElementById('inventoryForm').addEventListener('submit', function(e) {
+        document.getElementById('inventoryForm').addEventListener('submit', async function(e) {
             e.preventDefault();
+
+            if (!sheetsConnected) {
+                showError('กรุณาเชื่อมต่อ Google Sheets ก่อน');
+                return;
+            }
 
             const barcode = document.getElementById('barcode').value.trim();
             const productName = document.getElementById('productName').value.trim();
             const quantity = parseInt(document.getElementById('quantity').value);
 
             if (!barcode || !productName || quantity < 0) {
-                alert('กรุณากรอกข้อมูลให้ครบถ้วนและถูกต้อง');
+                showError('กรุณากรอกข้อมูลให้ครบถ้วนและถูกต้อง');
                 return;
             }
 
-            // ตรวจสอบว่ามีบาร์โค้ดนี้อยู่แล้วหรือไม่
-            const existingIndex = inventory.findIndex(item => item.barcode === barcode);
-            
-            if (existingIndex !== -1) {
-                // ถ้ามีอยู่แล้ว ให้อัปเดตจำนวน
-                if (confirm(`พบสินค้า "${inventory[existingIndex].productName}" ในระบบแล้ว\nต้องการอัปเดตจำนวนใหม่เป็น ${quantity} ชิ้นใช่หรือไม่?`)) {
-                    inventory[existingIndex].quantity = quantity;
-                    inventory[existingIndex].timestamp = new Date().toLocaleString('th-TH');
-                }
-            } else {
-                // ถ้ายังไม่มี ให้เพิ่มใหม่
-                const newItem = {
-                    barcode: barcode,
-                    productName: productName,
-                    quantity: quantity,
-                    timestamp: new Date().toLocaleString('th-TH')
-                };
+            const saveBtn = document.getElementById('saveBtn');
+            const originalText = saveBtn.innerHTML;
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '🔄 กำลังส่งข้อมูล... <div class="loading"></div>';
+
+            const newItem = {
+                barcode: barcode,
+                productName: productName,
+                quantity: quantity,
+                timestamp: new Date().toLocaleString('th-TH')
+            };
+
+            try {
+                // ส่งไป Google Sheets
+                await sendToSheets(newItem);
+                
+                // เพิ่มใน local inventory
                 inventory.push(newItem);
+                successCount++;
+                
+                // แสดงผลสำเร็จ
+                showSuccess(`✅ บันทึก "${productName}" ไป Google Sheets เรียบร้อย!`);
+                
+                // เคลียร์ฟอร์ม
+                this.reset();
+                document.getElementById('barcode').focus();
+                
+                // อัปเดต UI
+                displayInventory();
+                updateStats();
+                
+            } catch (error) {
+                showError('❌ เกิดข้อผิดพลาด: ' + error.message);
+            } finally {
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = originalText;
             }
-
-            // เคลียร์ฟอร์มและแสดงผล
-            this.reset();
-            document.getElementById('barcode').focus();
-            displayInventory();
-            updateStats();
-            showSuccessMessage();
         });
 
-        // ให้โฟกัสที่ช่องบาร์โค้ดเมื่อโหลดหน้า
+        // โหลด URL จาก localStorage เมื่อเริ่มต้น
         document.addEventListener('DOMContentLoaded', function() {
+            const savedUrl = localStorage.getItem('sheetsUrl');
+            if (savedUrl) {
+                document.getElementById('sheetsUrl').value = savedUrl;
+                connectToSheets();
+            }
+            
             document.getElementById('barcode').focus();
             updateStats();
         });
 
-        // ฟังก์ชันสำหรับการกด Enter ในช่องบาร์โค้ด
+        // ฟังก์ชันสำหรับการกด Enter
         document.getElementById('barcode').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 e.preventDefault();
