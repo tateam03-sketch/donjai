@@ -1,1262 +1,544 @@
-<!DOCTYPE html>
-<html lang="th">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>โปรแกรมนับสินค้า - Real-time</title>
+import React, { useState, useEffect, useRef } from 'react';
+import { Plus, Minus, Save, Trash2, Package, BarChart3, Scan, Edit3, Search } from 'lucide-react';
+
+export default function BarcodeInventorySystem() {
+  const [products, setProducts] = useState([]);
+  const [inventory, setInventory] = useState([]);
+  const [savedRecords, setSavedRecords] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [showProductManager, setShowProductManager] = useState(false);
+  const [barcodeInput, setBarcodeInput] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  // สำหรับเพิ่มสินค้าใหม่
+  const [newProduct, setNewProduct] = useState({
+    barcode: '',
+    name: '',
+    price: '',
+    unit: 'ชิ้น'
+  });
+
+  const barcodeInputRef = useRef(null);
+
+  // โหลดข้อมูลเมื่อเริ่มต้น
+  useEffect(() => {
+    const savedProducts = JSON.parse(localStorage.getItem('products') || '[]');
+    const savedInventoryRecords = JSON.parse(localStorage.getItem('inventoryRecords') || '[]');
+    setProducts(savedProducts);
+    setSavedRecords(savedInventoryRecords);
+  }, []);
+
+  // Focus ที่ช่องบาร์โค้ด
+  useEffect(() => {
+    if (barcodeInputRef.current) {
+      barcodeInputRef.current.focus();
+    }
+  }, []);
+
+  // เพิ่มสินค้าใหม่ในฐานข้อมูล
+  const addProduct = () => {
+    if (!newProduct.barcode || !newProduct.name) {
+      alert('กรุณากรอกบาร์โค้ดและชื่อสินค้า');
+      return;
+    }
+
+    // ตรวจสอบบาร์โค้ดซ้ำ
+    if (products.find(p => p.barcode === newProduct.barcode)) {
+      alert('บาร์โค้ดนี้มีอยู่แล้ว');
+      return;
+    }
+
+    const product = {
+      id: Date.now(),
+      barcode: newProduct.barcode,
+      name: newProduct.name,
+      price: parseFloat(newProduct.price) || 0,
+      unit: newProduct.unit || 'ชิ้น'
+    };
+
+    const updatedProducts = [...products, product];
+    setProducts(updatedProducts);
+    localStorage.setItem('products', JSON.stringify(updatedProducts));
     
-    <!-- Firebase SDK -->
-    <script type="module">
-        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js';
-        import { getDatabase, ref, set, push, onValue, remove, serverTimestamp, off } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js';
-        
-        // Firebase config สำหรับ demo (ใช้ได้จริง)
-        const firebaseConfig = {
-            apiKey: "AIzaSyDummy-Key-For-Demo-Usage-Only",
-            authDomain: "inventory-realtime-demo.firebaseapp.com",
-            databaseURL: "https://inventory-realtime-demo-default-rtdb.asia-southeast1.firebasedatabase.app/",
-            projectId: "inventory-realtime-demo",
-            storageBucket: "inventory-realtime-demo.appspot.com",
-            messagingSenderId: "123456789012",
-            appId: "1:123456789012:web:abc123def456ghi789"
-        };
-        
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const database = getDatabase(app);
-        
-        // ทำให้ accessible จาก global scope
-        window.firebaseDB = database;
-        window.firebaseRef = ref;
-        window.firebaseSet = set;
-        window.firebasePush = push;
-        window.firebaseOnValue = onValue;
-        window.firebaseRemove = remove;
-        window.firebaseServerTimestamp = serverTimestamp;
-        window.firebaseOff = off;
-        
-        console.log("Firebase initialized successfully");
-    </script>
+    setNewProduct({ barcode: '', name: '', price: '', unit: 'ชิ้น' });
+    alert('เพิ่มสินค้าเรียบร้อยแล้ว');
+  };
+
+  // สแกน/ป้อนบาร์โค้ด
+  const handleBarcodeInput = (e) => {
+    if (e.key === 'Enter' && barcodeInput.trim()) {
+      const barcode = barcodeInput.trim();
+      const product = products.find(p => p.barcode === barcode);
+      
+      if (product) {
+        addToInventory(product);
+      } else {
+        const confirmed = window.confirm(`ไม่พบสินค้าบาร์โค้ด: ${barcode}\nต้องการเพิ่มสินค้าใหม่หรือไม่?`);
+        if (confirmed) {
+          setNewProduct({ ...newProduct, barcode: barcode });
+          setShowProductManager(true);
+        }
+      }
+      setBarcodeInput('');
+    }
+  };
+
+  // เพิ่มสินค้าลงในรายการนับสต็อก
+  const addToInventory = (product) => {
+    const existingItem = inventory.find(item => item.barcode === product.barcode);
     
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-        
-        .container {
-            max-width: 900px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            overflow: hidden;
-        }
-        
-        .header {
-            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
-            color: white;
-            padding: 30px;
-            text-align: center;
-        }
-        
-        .header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
-        }
-        
-        .online-indicator {
-            background: rgba(255,255,255,0.2);
-            padding: 10px 20px;
-            border-radius: 20px;
-            margin-top: 15px;
-            display: inline-block;
-        }
-        
-        .status-dot {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            margin-right: 8px;
-            animation: pulse 2s infinite;
-        }
-        
-        .status-dot.online { background: #00ff00; }
-        .status-dot.connecting { background: #ffff00; }
-        .status-dot.offline { background: #ff0000; }
-        
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.5; }
-            100% { opacity: 1; }
-        }
-        
-        .content {
-            padding: 30px;
-        }
-        
-        .setup-section {
-            background: #e3f2fd;
-            border: 2px solid #2196f3;
-            border-radius: 15px;
-            padding: 25px;
-            margin-bottom: 30px;
-        }
-        
-        .setup-section h3 {
-            color: #1976d2;
-            margin-bottom: 15px;
-        }
-        
-        .input-section {
-            background: #f8f9fa;
-            border: 2px solid #28a745;
-            border-radius: 15px;
-            padding: 25px;
-            margin-bottom: 30px;
-        }
-        
-        .input-section h3 {
-            color: #155724;
-            margin-bottom: 20px;
-            text-align: center;
-        }
-        
-        .btn {
-            padding: 15px 30px;
-            border: none;
-            border-radius: 10px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin: 5px;
-        }
-        
-        .btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
-        
-        .btn-primary {
-            background: #007bff;
-            color: white;
-        }
-        
-        .btn-primary:hover:not(:disabled) {
-            background: #0056b3;
-            transform: translateY(-2px);
-        }
-        
-        .btn-success {
-            background: #28a745;
-            color: white;
-        }
-        
-        .btn-success:hover:not(:disabled) {
-            background: #1e7e34;
-            transform: translateY(-2px);
-        }
-        
-        .btn-danger {
-            background: #dc3545;
-            color: white;
-        }
-        
-        .btn-danger:hover:not(:disabled) {
-            background: #c82333;
-            transform: translateY(-2px);
-        }
-        
-        .input-group {
-            margin: 20px 0;
-            padding: 20px;
-            background: #f1f3f4;
-            border-radius: 10px;
-        }
-        
-        .input-group label {
-            display: block;
-            margin-bottom: 10px;
-            font-weight: bold;
-            color: #333;
-        }
-        
-        .input-group input, .input-group select {
-            width: 100%;
-            padding: 15px;
-            border: 2px solid #ddd;
-            border-radius: 8px;
-            font-size: 18px;
-            transition: border-color 0.3s ease;
-        }
-        
-        .input-group input:focus, .input-group select:focus {
-            outline: none;
-            border-color: #007bff;
-            box-shadow: 0 0 0 3px rgba(0,123,255,0.1);
-        }
-        
-        .inventory-list {
-            margin-top: 30px;
-        }
-        
-        .inventory-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 20px;
-            margin: 10px 0;
-            background: #fff;
-            border: 1px solid #ddd;
-            border-radius: 15px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-            transition: all 0.3s ease;
-            position: relative;
-        }
-        
-        .inventory-item.new-item {
-            background: linear-gradient(90deg, #d4edda, #ffffff);
-            border-color: #28a745;
-            animation: slideIn 0.5s ease;
-        }
-        
-        .inventory-item.updated-item {
-            background: linear-gradient(90deg, #fff3cd, #ffffff);
-            border-color: #ffc107;
-            animation: slideIn 0.5s ease;
-        }
-        
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateX(-20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateX(0);
-            }
-        }
-        
-        .inventory-item:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
-        }
-        
-        .item-info {
-            flex-grow: 1;
-        }
-        
-        .item-code {
-            font-family: monospace;
-            color: #666;
-            font-size: 0.9em;
-            background: #f8f9fa;
-            padding: 4px 8px;
-            border-radius: 4px;
-            display: inline-block;
-            margin-top: 5px;
-        }
-        
-        .item-quantity {
-            font-size: 1.5em;
-            font-weight: bold;
-            color: #007bff;
-            margin: 0 20px;
-            background: #e3f2fd;
-            padding: 10px 15px;
-            border-radius: 10px;
-        }
-        
-        .item-datetime {
-            font-size: 0.8em;
-            color: #666;
-            margin-top: 5px;
-        }
-        
-        .item-device {
-            font-size: 0.7em;
-            color: #888;
-            background: #e9ecef;
-            padding: 2px 6px;
-            border-radius: 3px;
-            margin-top: 3px;
-        }
-        
-        .realtime-badge {
-            position: absolute;
-            top: 5px;
-            right: 5px;
-            background: #28a745;
-            color: white;
-            padding: 2px 8px;
-            border-radius: 10px;
-            font-size: 0.7em;
-            font-weight: bold;
-        }
-        
-        .status {
-            padding: 15px 20px;
-            margin: 15px 0;
-            border-radius: 10px;
-            text-align: center;
-            font-weight: bold;
-            font-size: 16px;
-        }
-        
-        .status.success {
-            background: #d4edda;
-            color: #155724;
-            border: 2px solid #c3e6cb;
-        }
-        
-        .status.error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 2px solid #f5c6cb;
-        }
-        
-        .status.info {
-            background: #d1ecf1;
-            color: #0c5460;
-            border: 2px solid #bee5eb;
-        }
-        
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin: 30px 0;
-        }
-        
-        .stat-card {
-            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
-            color: white;
-            padding: 25px;
-            border-radius: 15px;
-            text-align: center;
-            box-shadow: 0 6px 12px rgba(0,0,0,0.1);
-        }
-        
-        .stat-number {
-            font-size: 2.5em;
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
-        
-        .online-users {
-            background: #e8f5e8;
-            border: 2px solid #28a745;
-            border-radius: 15px;
-            padding: 20px;
-            margin: 20px 0;
-        }
-        
-        .online-users h4 {
-            color: #155724;
-            margin-bottom: 15px;
-        }
-        
-        .user-list {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-        
-        .user-badge {
-            background: white;
-            padding: 8px 12px;
-            border-radius: 20px;
-            border: 1px solid #28a745;
-            font-size: 0.9em;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-        
-        .user-badge .status-dot {
-            width: 8px;
-            height: 8px;
-            background: #28a745;
-        }
-        
-        .export-section {
-            margin-top: 30px;
-            padding: 25px;
-            background: #f8f9fa;
-            border-radius: 15px;
-            text-align: center;
-        }
-        
-        .loading {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #007bff;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        @media (max-width: 768px) {
-            .container {
-                margin: 10px;
-                border-radius: 15px;
-            }
-            
-            .header {
-                padding: 20px;
-            }
-            
-            .header h1 {
-                font-size: 2em;
-            }
-            
-            .content {
-                padding: 20px;
-            }
-            
-            .inventory-item {
-                flex-direction: column;
-                align-items: flex-start;
-            }
-            
-            .item-quantity {
-                margin: 10px 0;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>📊 โปรแกรมนับสินค้า</h1>
-            <p>Real-time Sync - ข้อมูลแชร์กันทันที</p>
-            <div class="online-indicator">
-                <span class="status-dot connecting" id="connectionDot"></span>
-                <span id="connectionStatus">กำลังเชื่อมต่อ...</span>
-            </div>
+    if (existingItem) {
+      setInventory(inventory.map(item =>
+        item.barcode === product.barcode 
+          ? { ...item, quantity: item.quantity + 1 }
+          : item
+      ));
+    } else {
+      setInventory([...inventory, {
+        ...product,
+        quantity: 1,
+        inventoryId: Date.now()
+      }]);
+    }
+  };
+
+  // ปรับจำนวนสินค้าในรายการ
+  const updateQuantity = (barcode, change) => {
+    setInventory(inventory.map(item =>
+      item.barcode === barcode 
+        ? { ...item, quantity: Math.max(0, item.quantity + change) }
+        : item
+    ).filter(item => item.quantity > 0));
+  };
+
+  // ลบสินค้าออกจากรายการ
+  const removeFromInventory = (barcode) => {
+    setInventory(inventory.filter(item => item.barcode !== barcode));
+  };
+
+  // บันทึกการนับสต็อก
+  const saveInventoryRecord = () => {
+    if (inventory.length === 0) {
+      alert('กรุณาเพิ่มสินค้าก่อนบันทึก');
+      return;
+    }
+
+    const record = {
+      id: Date.now(),
+      timestamp: new Date().toLocaleString('th-TH'),
+      items: [...inventory],
+      totalItems: inventory.reduce((sum, item) => sum + item.quantity, 0),
+      totalValue: inventory.reduce((sum, item) => sum + (item.quantity * item.price), 0)
+    };
+
+    const newSavedRecords = [record, ...savedRecords];
+    setSavedRecords(newSavedRecords);
+    localStorage.setItem('inventoryRecords', JSON.stringify(newSavedRecords));
+    
+    alert('บันทึกการนับสต็อกเรียบร้อยแล้ว!');
+    setInventory([]);
+    
+    // Focus กลับไปที่ช่องบาร์โค้ด
+    if (barcodeInputRef.current) {
+      barcodeInputRef.current.focus();
+    }
+  };
+
+  // ลบสินค้าจากฐานข้อมูล
+  const deleteProduct = (id) => {
+    const updatedProducts = products.filter(p => p.id !== id);
+    setProducts(updatedProducts);
+    localStorage.setItem('products', JSON.stringify(updatedProducts));
+  };
+
+  // ลบประวัติ
+  const deleteRecord = (id) => {
+    const newRecords = savedRecords.filter(record => record.id !== id);
+    setSavedRecords(newRecords);
+    localStorage.setItem('inventoryRecords', JSON.stringify(newRecords));
+  };
+
+  // กรองสินค้าตามการค้นหา
+  const filteredProducts = products.filter(product =>
+    product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    product.barcode.includes(searchTerm)
+  );
+
+  // คำนวณสรุป
+  const totalQuantity = inventory.reduce((sum, item) => sum + item.quantity, 0);
+  const totalValue = inventory.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-6">
+          <div className="flex items-center justify-center mb-2">
+            <Scan className="w-8 h-8 text-blue-600 mr-2" />
+            <h1 className="text-3xl font-bold text-gray-800">ระบบนับสต็อกสินค้า</h1>
+          </div>
+          <p className="text-gray-600">สแกนบาร์โค้ดเพื่อนับสต็อกอย่างรวดเร็ว</p>
         </div>
-        
-        <div class="content">
-            <!-- Setup Section -->
-            <div class="setup-section">
-                <h3>🚀 ตั้งค่าการใช้งาน</h3>
-                
-                <div class="input-group" style="background: white;">
-                    <label for="storeId">รหัสร้าน (ใช้เดียวกันทุกเครื่อง):</label>
-                    <input type="text" id="storeId" placeholder="กรอกรหัสร้าน เช่น shop001" value="">
-                    <small style="color: #666; display: block; margin-top: 5px;">
-                        💡 ทุกเครื่องที่ใช้รหัสร้านเดียวกันจะเห็นข้อมูลเดียวกัน
-                    </small>
-                </div>
-                
-                <div class="input-group" style="background: white;">
-                    <label for="deviceName">ชื่อเครื่องนี้:</label>
-                    <input type="text" id="deviceName" placeholder="เช่น มือถือ-แจ้ หรือ คอม-หน้าร้าน" value="">
-                    <small style="color: #666; display: block; margin-top: 5px;">
-                        💡 จะแสดงให้ทีมงานรู้ว่าใครบันทึกข้อมูลนี้
-                    </small>
-                </div>
-                
-                <div style="text-align: center;">
-                    <button class="btn btn-success" onclick="connectToStore()" id="connectBtn">
-                        🔗 เชื่อมต่อและเริ่มใช้งาน
+
+        {/* Barcode Scanner */}
+        <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+          <div className="flex items-center mb-4">
+            <Scan className="w-6 h-6 text-blue-600 mr-2" />
+            <h2 className="text-xl font-semibold text-gray-800">สแกนบาร์โค้ด</h2>
+          </div>
+          
+          {/* Error Message */}
+          {scannerError && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+              <p className="text-red-600 text-sm">{scannerError}</p>
+            </div>
+          )}
+          
+          <div className="space-y-4">
+            {/* Manual Input */}
+            <div className="flex gap-4">
+              <input
+                ref={barcodeInputRef}
+                type="text"
+                placeholder="สแกนหรือป้อนบาร์โค้ดแล้วกด Enter"
+                value={barcodeInput}
+                onChange={(e) => setBarcodeInput(e.target.value)}
+                onKeyPress={handleBarcodeInput}
+                className="flex-1 border-2 border-gray-300 rounded-lg p-4 text-lg focus:border-blue-500 focus:outline-none"
+                autoFocus={!showScanner}
+              />
+              <button
+                onClick={() => setShowProductManager(!showProductManager)}
+                className="bg-indigo-500 hover:bg-indigo-600 text-white font-semibold px-6 py-4 rounded-lg transition-colors duration-200 flex items-center"
+              >
+                <Edit3 className="w-5 h-5 mr-2" />
+                <span className="hidden sm:inline">จัดการสินค้า</span>
+              </button>
+            </div>
+
+            {/* Camera Scanner Controls */}
+            <div className="flex gap-4 justify-center">
+              {!showScanner ? (
+                <button
+                  onClick={startScanner}
+                  disabled={isScanning}
+                  className="bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white font-semibold px-6 py-3 rounded-lg transition-colors duration-200 flex items-center"
+                >
+                  <Camera className="w-5 h-5 mr-2" />
+                  {isScanning ? 'กำลังเปิดกล้อง...' : 'เปิดกล้องสแกน'}
+                </button>
+              ) : (
+                <div className="flex gap-4">
+                  <button
+                    onClick={stopScanner}
+                    className="bg-red-500 hover:bg-red-600 text-white font-semibold px-6 py-3 rounded-lg transition-colors duration-200 flex items-center"
+                  >
+                    <X className="w-5 h-5 mr-2" />
+                    ปิดกล้อง
+                  </button>
+                  {/* Demo buttons for testing */}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => simulateBarcodeDetection('1234567890123')}
+                      className="bg-green-500 hover:bg-green-600 text-white px-4 py-3 rounded-lg text-sm"
+                    >
+                      ทดสอบสแกน A
                     </button>
+                    <button
+                      onClick={() => simulateBarcodeDetection('9876543210987')}
+                      className="bg-green-500 hover:bg-green-600 text-white px-4 py-3 rounded-lg text-sm"
+                    >
+                      ทดสอบสแกน B
+                    </button>
+                  </div>
                 </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Camera Scanner View */}
+        {showScanner && (
+          <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center">
+                <Camera className="w-6 h-6 text-blue-600 mr-2" />
+                <h3 className="text-lg font-semibold text-gray-800">กล้องสแกนบาร์โค้ด</h3>
+              </div>
+              <button
+                onClick={stopScanner}
+                className="text-red-500 hover:text-red-700"
+              >
+                <X className="w-6 h-6" />
+              </button>
             </div>
             
-            <!-- Online Users Section -->
-            <div class="online-users" id="onlineUsersSection" style="display: none;">
-                <h4>👥 ผู้ใช้งานออนไลน์</h4>
-                <div class="user-list" id="userList">
-                    <div class="user-badge">
-                        <span class="status-dot"></span>
-                        กำลังโหลด...
+            <div className="relative bg-gray-900 rounded-lg overflow-hidden">
+              <video
+                ref={videoRef}
+                className="w-full max-w-md mx-auto block"
+                style={{ maxHeight: '400px' }}
+                playsInline
+                muted
+              />
+              
+              {/* Scanning Overlay */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="border-2 border-red-500 bg-transparent rounded-lg w-64 h-32 flex items-center justify-center">
+                  <div className="text-white text-sm bg-black bg-opacity-50 px-2 py-1 rounded">
+                    จับบาร์โค้ดให้อยู่ในกรอบ
+                  </div>
+                </div>
+              </div>
+              
+              {/* Instructions */}
+              <div className="absolute bottom-4 left-0 right-0 text-center">
+                <p className="text-white text-sm bg-black bg-opacity-50 px-4 py-2 rounded-lg inline-block">
+                  📱 วางบาร์โค้ดให้อยู่ในกรอบสี่เหลี่ยมสีแดง
+                </p>
+              </div>
+            </div>
+            
+            <div className="mt-4 text-center">
+              <p className="text-gray-600 text-sm mb-2">
+                💡 <strong>หมายเหตุ:</strong> ในการใช้งานจริง จะมีการตรวจจับบาร์โค้ดอัตโนมัติ
+              </p>
+              <p className="text-gray-500 text-xs">
+                กดปุ่ม "ทดสอบสแกน" ด้านบนเพื่อจำลองการสแกนบาร์โค้ด
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Product Manager */}
+        {showProductManager && (
+          <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+            <h2 className="text-xl font-semibold text-gray-800 mb-4">จัดการข้อมูลสินค้า</h2>
+            
+            {/* Add New Product */}
+            <div className="border-b border-gray-200 pb-6 mb-6">
+              <h3 className="text-lg font-medium text-gray-800 mb-3">เพิ่มสินค้าใหม่</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                <input
+                  type="text"
+                  placeholder="บาร์โค้ด"
+                  value={newProduct.barcode}
+                  onChange={(e) => setNewProduct({...newProduct, barcode: e.target.value})}
+                  className="border-2 border-gray-300 rounded-lg p-3 focus:border-blue-500 focus:outline-none"
+                />
+                <input
+                  type="text"
+                  placeholder="ชื่อสินค้า"
+                  value={newProduct.name}
+                  onChange={(e) => setNewProduct({...newProduct, name: e.target.value})}
+                  className="border-2 border-gray-300 rounded-lg p-3 focus:border-blue-500 focus:outline-none"
+                />
+                <input
+                  type="number"
+                  placeholder="ราคา"
+                  value={newProduct.price}
+                  onChange={(e) => setNewProduct({...newProduct, price: e.target.value})}
+                  className="border-2 border-gray-300 rounded-lg p-3 focus:border-blue-500 focus:outline-none"
+                />
+                <select
+                  value={newProduct.unit}
+                  onChange={(e) => setNewProduct({...newProduct, unit: e.target.value})}
+                  className="border-2 border-gray-300 rounded-lg p-3 focus:border-blue-500 focus:outline-none"
+                >
+                  <option value="ชิ้น">ชิ้น</option>
+                  <option value="กล่อง">กล่อง</option>
+                  <option value="แพ็ค">แพ็ค</option>
+                  <option value="กิโลกรัม">กิโลกรัม</option>
+                  <option value="ลิตร">ลิตร</option>
+                </select>
+                <button
+                  onClick={addProduct}
+                  className="bg-green-500 hover:bg-green-600 text-white font-semibold py-3 px-4 rounded-lg transition-colors duration-200"
+                >
+                  เพิ่มสินค้า
+                </button>
+              </div>
+            </div>
+
+            {/* Product List */}
+            <div>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-medium text-gray-800">รายการสินค้าทั้งหมด ({products.length} รายการ)</h3>
+                <div className="relative">
+                  <Search className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="ค้นหาสินค้า..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+              
+              <div className="max-h-96 overflow-y-auto">
+                <div className="grid gap-3">
+                  {filteredProducts.map((product) => (
+                    <div key={product.id} className="border border-gray-200 rounded-lg p-4 flex justify-between items-center">
+                      <div className="flex-1">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                          <span className="font-medium text-gray-800">{product.name}</span>
+                          <span className="text-sm text-gray-500">บาร์โค้ด: {product.barcode}</span>
+                          <span className="text-sm text-green-600">฿{product.price.toFixed(2)}/{product.unit}</span>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => addToInventory(product)}
+                          className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm transition-colors duration-200"
+                        >
+                          เพิ่มในรายการ
+                        </button>
+                        <button
+                          onClick={() => deleteProduct(product.id)}
+                          className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm transition-colors duration-200"
+                        >
+                          ลบ
+                        </button>
+                      </div>
                     </div>
+                  ))}
                 </div>
+              </div>
             </div>
-            
-            <!-- Input Section -->
-            <div class="input-section" id="inputSection" style="display: none;">
-                <h3>⚡ บันทึกสินค้า - แชร์ทันที!</h3>
-                
-                <div class="input-group">
-                    <label for="productCode">รหัสสินค้า:</label>
-                    <input type="text" id="productCode" placeholder="พิมพ์รหัสสินค้า เช่น 8850188210300" autofocus>
-                </div>
-                
-                <div class="input-group">
-                    <label for="productName">ชื่อสินค้า:</label>
-                    <input type="text" id="productName" placeholder="ชื่อสินค้า">
-                </div>
-                
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                    <div class="input-group" style="margin: 10px 0;">
-                        <label for="quantity">จำนวน:</label>
-                        <input type="number" id="quantity" min="1" value="1" placeholder="จำนวน">
+          </div>
+        )}
+
+        {/* Current Inventory */}
+        {inventory.length > 0 && (
+          <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-gray-800">รายการนับสต็อกปัจจุบัน</h2>
+              <button
+                onClick={saveInventoryRecord}
+                className="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-200 flex items-center"
+              >
+                <Save className="w-4 h-4 mr-2" />
+                บันทึกการนับสต็อก
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {inventory.map((item) => (
+                <div key={item.inventoryId} className="border border-gray-200 rounded-lg p-4">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-gray-800 text-lg">{item.name}</h3>
+                      <div className="flex flex-wrap gap-4 text-sm text-gray-600">
+                        <span>บาร์โค้ด: {item.barcode}</span>
+                        <span>ราคา: ฿{item.price.toFixed(2)}/{item.unit}</span>
+                        <span className="text-green-600 font-medium">รวม: ฿{(item.quantity * item.price).toFixed(2)}</span>
+                      </div>
                     </div>
                     
-                    <div class="input-group" style="margin: 10px 0;">
-                        <label for="action">การกระทำ:</label>
-                        <select id="action">
-                            <option value="add">เพิ่มจำนวน</option>
-                            <option value="set">ตั้งจำนวนใหม่</option>
-                            <option value="subtract">ลดจำนวน</option>
-                        </select>
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-2">
+                        <button
+                          onClick={() => updateQuantity(item.barcode, -1)}
+                          className="w-10 h-10 bg-red-500 hover:bg-red-600 text-white rounded-lg flex items-center justify-center transition-colors duration-200"
+                        >
+                          <Minus className="w-4 h-4" />
+                        </button>
+                        <span className="text-2xl font-bold text-gray-800 w-16 text-center">{item.quantity}</span>
+                        <button
+                          onClick={() => updateQuantity(item.barcode, 1)}
+                          className="w-10 h-10 bg-blue-500 hover:bg-blue-600 text-white rounded-lg flex items-center justify-center transition-colors duration-200"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
+                      
+                      <button
+                        onClick={() => removeFromInventory(item.barcode)}
+                        className="w-10 h-10 bg-gray-500 hover:bg-red-500 text-white rounded-lg flex items-center justify-center transition-colors duration-200"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
+                  </div>
                 </div>
-                
-                <div style="text-align: center; margin-top: 20px;">
-                    <button class="btn btn-success" onclick="addItem()" id="addBtn" style="font-size: 20px; padding: 20px 50px;">
-                        📝 บันทึก + แชร์ทันที
-                    </button>
-                    <button class="btn btn-primary" onclick="clearForm()" style="font-size: 18px; padding: 18px 40px;">
-                        🔄 เคลียร์ฟอร์ม
-                    </button>
-                </div>
+              ))}
             </div>
-            
-            <!-- Status Messages -->
-            <div id="statusMessage"></div>
-            
-            <!-- Statistics -->
-            <div class="stats" id="statsSection" style="display: none;">
-                <div class="stat-card">
-                    <div class="stat-number" id="totalItems">0</div>
-                    <div>รายการสินค้า</div>
+
+            {/* Summary */}
+            <div className="mt-6 p-4 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg">
+              <div className="grid grid-cols-2 gap-4 text-center">
+                <div>
+                  <p className="text-sm text-gray-600">จำนวนรวม</p>
+                  <p className="text-2xl font-bold text-blue-600">{totalQuantity} หน่วย</p>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-number" id="totalQuantity">0</div>
-                    <div>จำนวนทั้งหมด</div>
+                <div>
+                  <p className="text-sm text-gray-600">มูลค่ารวม</p>
+                  <p className="text-2xl font-bold text-green-600">฿{totalValue.toFixed(2)}</p>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-number" id="onlineCount">0</div>
-                    <div>คนออนไลน์</div>
-                </div>
+              </div>
             </div>
-            
-            <!-- Inventory List -->
-            <div class="inventory-list" id="inventorySection" style="display: none;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <h3>📋 รายการสินค้า - Real-time</h3>
-                    <button class="btn btn-danger" onclick="clearAll()">🗑️ ลบทั้งหมด</button>
-                </div>
-                <div id="inventoryItems">
-                    <p style="text-align: center; color: #999; padding: 40px; font-size: 18px;">
-                        กำลังโหลดข้อมูล...<br>
-                        <small>ข้อมูลจะอัปเดตแบบ Real-time จากทุกเครื่อง</small>
-                    </p>
-                </div>
-            </div>
-            
-            <!-- Export Section -->
-            <div class="export-section" id="exportSection" style="display: none;">
-                <h3>📤 ส่งออกข้อมูล</h3>
-                <button class="btn btn-primary" onclick="exportData()">💾 ดาวน์โหลด CSV</button>
-                <button class="btn btn-primary" onclick="printData()">🖨️ พิมพ์รายงาน</button>
-            </div>
+          </div>
+        )}
+
+        {/* History Toggle */}
+        <div className="text-center mb-4">
+          <button
+            onClick={() => setShowHistory(!showHistory)}
+            className="bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-6 rounded-lg transition-colors duration-200 flex items-center mx-auto"
+          >
+            <BarChart3 className="w-4 h-4 mr-2" />
+            {showHistory ? 'ซ่อน' : 'แสดง'}ประวัติการนับสต็อก
+          </button>
         </div>
+
+        {/* History */}
+        {showHistory && savedRecords.length > 0 && (
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <h2 className="text-xl font-semibold text-gray-800 mb-4">ประวัติการนับสต็อก</h2>
+            <div className="space-y-4">
+              {savedRecords.map((record) => (
+                <div key={record.id} className="border border-gray-200 rounded-lg p-4">
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <p className="font-semibold text-gray-800">วันที่: {record.timestamp}</p>
+                      <p className="text-sm text-gray-600">
+                        รวม {record.totalItems} หน่วย | มูลค่า ฿{record.totalValue.toFixed(2)}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => deleteRecord(record.id)}
+                      className="text-red-500 hover:text-red-700 transition-colors duration-200"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {record.items.map((item, index) => (
+                      <div key={index} className="text-sm bg-gray-50 p-3 rounded">
+                        <div className="font-medium">{item.name}</div>
+                        <div className="text-gray-600">
+                          บาร์โค้ด: {item.barcode} | จำนวน: {item.quantity} {item.unit}
+                        </div>
+                        <div className="text-green-600">฿{(item.quantity * item.price).toFixed(2)}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Empty States */}
+        {inventory.length === 0 && savedRecords.length === 0 && !showHistory && (
+          <div className="text-center py-12">
+            <Scan className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+            <p className="text-gray-500 text-lg">เริ่มต้นโดยการสแกนบาร์โค้ดหรือเพิ่มสินค้าใหม่</p>
+          </div>
+        )}
+      </div>
     </div>
-
-    <script>
-        let inventory = {};
-        let currentStoreId = '';
-        let currentDeviceName = '';
-        let deviceId = generateDeviceId();
-        let isConnected = false;
-        let inventoryRef = null;
-        let onlineUsersRef = null;
-        let lastItemUpdate = {};
-        let onlineUsers = {};
-
-        // สร้าง Device ID
-        function generateDeviceId() {
-            let id = localStorage.getItem('deviceId');
-            if (!id) {
-                id = 'device_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6);
-                localStorage.setItem('deviceId', id);
-            }
-            return id;
-        }
-
-        // เริ่มต้นแอพ
-        window.addEventListener('load', function() {
-            setupKeyNavigation();
-            loadSettings();
-            
-            // ตรวจสอบว่า Firebase พร้อมใช้งานหรือไม่
-            const checkFirebase = setInterval(() => {
-                if (window.firebaseDB) {
-                    clearInterval(checkFirebase);
-                    updateConnectionStatus('connecting', 'พร้อมเชื่อมต่อ Firebase');
-                }
-            }, 500);
-        });
-
-        // โหลดการตั้งค่า
-        function loadSettings() {
-            const savedStoreId = localStorage.getItem('storeId');
-            const savedDeviceName = localStorage.getItem('deviceName');
-            
-            if (savedStoreId) {
-                document.getElementById('storeId').value = savedStoreId;
-            }
-            
-            if (savedDeviceName) {
-                document.getElementById('deviceName').value = savedDeviceName;
-            } else {
-                // สร้างชื่อเครื่องอัตโนมัติ
-                const userAgent = navigator.userAgent.toLowerCase();
-                let defaultName = 'เครื่องไม่ทราบชื่อ';
-                
-                if (userAgent.includes('mobile')) {
-                    defaultName = 'มือถือ-' + deviceId.slice(-4);
-                } else if (userAgent.includes('tablet')) {
-                    defaultName = 'แท็บเล็ต-' + deviceId.slice(-4);
-                } else {
-                    defaultName = 'คอม-' + deviceId.slice(-4);
-                }
-                
-                document.getElementById('deviceName').value = defaultName;
-            }
-        }
-
-        // อัปเดตสถานะการเชื่อมต่อ
-        function updateConnectionStatus(status, message) {
-            const dot = document.getElementById('connectionDot');
-            const text = document.getElementById('connectionStatus');
-            
-            dot.className = `status-dot ${status}`;
-            text.textContent = message;
-        }
-
-        // ตั้งค่าการกด Enter
-        function setupKeyNavigation() {
-            const productCode = document.getElementById('productCode');
-            const productName = document.getElementById('productName');
-            const quantity = document.getElementById('quantity');
-
-            if (productCode) {
-                productCode.addEventListener('keypress', function(e) {
-                    if (e.key === 'Enter') {
-                        e.preventDefault();
-                        productName.focus();
-                    }
-                });
-            }
-
-            if (productName) {
-                productName.addEventListener('keypress', function(e) {
-                    if (e.key === 'Enter') {
-                        e.preventDefault();
-                        quantity.focus();
-                    }
-                });
-            }
-
-            if (quantity) {
-                quantity.addEventListener('keypress', function(e) {
-                    if (e.key === 'Enter') {
-                        e.preventDefault();
-                        addItem();
-                    }
-                });
-            }
-        }
-
-        // เชื่อมต่อร้าน
-        async function connectToStore() {
-            const storeId = document.getElementById('storeId').value.trim();
-            const deviceName = document.getElementById('deviceName').value.trim();
-            
-            if (!storeId) {
-                showStatus('กรุณากรอกรหัสร้าน', 'error');
-                return;
-            }
-            
-            if (!deviceName) {
-                showStatus('กรุณากรอกชื่อเครื่อง', 'error');
-                return;
-            }
-
-            if (!window.firebaseDB) {
-                // ใช้ระบบ localStorage แทน Firebase
-                showStatus('ใช้ระบบ Local Storage (ข้อมูลจะไม่แชร์ระหว่างเครื่อง)', 'info');
-                connectWithLocalStorage(storeId, deviceName);
-                return;
-            }
-            
-            try {
-                currentStoreId = storeId;
-                currentDeviceName = deviceName;
-                
-                // บันทึกการตั้งค่า
-                localStorage.setItem('storeId', storeId);
-                localStorage.setItem('deviceName', deviceName);
-                
-                updateConnectionStatus('connecting', 'กำลังเชื่อมต่อ...');
-                
-                // อ้างอิง Firebase
-                inventoryRef = window.firebaseRef(window.firebaseDB, `stores/${storeId}/inventory`);
-                onlineUsersRef = window.firebaseRef(window.firebaseDB, `stores/${storeId}/onlineUsers/${deviceId}`);
-                
-                // บันทึกข้อมูลผู้ใช้ออนไลน์
-                await window.firebaseSet(onlineUsersRef, {
-                    name: deviceName,
-                    deviceId: deviceId,
-                    lastSeen: window.firebaseServerTimestamp(),
-                    userAgent: navigator.userAgent.substring(0, 50)
-                });
-                
-                // ฟังการเปลี่ยนแปลงข้อมูลสินค้า
-                window.firebaseOnValue(inventoryRef, (snapshot) => {
-                    const data = snapshot.val();
-                    inventory = data || {};
-                    updateDisplay();
-                });
-                
-                // ฟังผู้ใช้ออนไลน์
-                const allUsersRef = window.firebaseRef(window.firebaseDB, `stores/${storeId}/onlineUsers`);
-                window.firebaseOnValue(allUsersRef, (snapshot) => {
-                    const users = snapshot.val() || {};
-                    updateOnlineUsers(users);
-                });
-                
-                // ลบผู้ใช้เมื่อออกจากหน้า
-                window.addEventListener('beforeunload', () => {
-                    if (onlineUsersRef) {
-                        window.firebaseRemove(onlineUsersRef);
-                    }
-                });
-                
-                isConnected = true;
-                updateConnectionStatus('online', `เชื่อมต่อ ${storeId} แล้ว`);
-                showStatus(`🎉 เชื่อมต่อสำเร็จ! ร้าน: ${storeId} | เครื่อง: ${deviceName}`, 'success');
-                
-                // แสดง UI
-                showMainUI();
-                
-            } catch (error) {
-                console.error('Connection error:', error);
-                updateConnectionStatus('offline', 'เชื่อมต่อไม่ได้');
-                showStatus('เชื่อมต่อไม่ได้: ' + error.message + ' (ลองใช้ระบบ Local)', 'error');
-                
-                // Fallback ไป localStorage
-                connectWithLocalStorage(storeId, deviceName);
-            }
-        }
-
-        // เชื่อมต่อด้วย localStorage (สำรอง)
-        function connectWithLocalStorage(storeId, deviceName) {
-            currentStoreId = storeId;
-            currentDeviceName = deviceName;
-            
-            localStorage.setItem('storeId', storeId);
-            localStorage.setItem('deviceName', deviceName);
-            
-            // โหลดข้อมูل
-            const stored = localStorage.getItem(`inventory_${storeId}`);
-            if (stored) {
-                try {
-                    inventory = JSON.parse(stored);
-                } catch (e) {
-                    inventory = {};
-                }
-            }
-            
-            isConnected = true;
-            updateConnectionStatus('offline', 'Local Mode');
-            showStatus(`📱 ใช้งานแบบ Local: ร้าน ${storeId} | เครื่อง ${deviceName}`, 'info');
-            
-            showMainUI();
-            updateDisplay();
-        }
-
-        // แสดง UI หลัก
-        function showMainUI() {
-            document.getElementById('inputSection').style.display = 'block';
-            document.getElementById('statsSection').style.display = 'block';
-            document.getElementById('inventorySection').style.display = 'block';
-            document.getElementById('exportSection').style.display = 'block';
-            
-            if (isConnected && window.firebaseDB) {
-                document.getElementById('onlineUsersSection').style.display = 'block';
-            }
-        }
-
-        // อัปเดตผู้ใช้ออนไลน์
-        function updateOnlineUsers(users) {
-            onlineUsers = users;
-            const userList = document.getElementById('userList');
-            
-            if (!users || Object.keys(users).length === 0) {
-                userList.innerHTML = '<div class="user-badge">ไม่มีผู้ใช้ออนไลน์</div>';
-                document.getElementById('onlineCount').textContent = '0';
-                return;
-            }
-
-            let userHTML = '';
-            let activeUsers = 0;
-            
-            for (const [userId, user] of Object.entries(users)) {
-                if (user && user.name) {
-                    userHTML += `
-                        <div class="user-badge">
-                            <span class="status-dot"></span>
-                            ${user.name}
-                            ${userId === deviceId ? '(คุณ)' : ''}
-                        </div>
-                    `;
-                    activeUsers++;
-                }
-            }
-            
-            userList.innerHTML = userHTML;
-            document.getElementById('onlineCount').textContent = activeUsers.toString();
-        }
-
-        // แสดงข้อความสถานะ
-        function showStatus(message, type = 'info') {
-            const statusDiv = document.getElementById('statusMessage');
-            statusDiv.innerHTML = `<div class="status ${type}">${message}</div>`;
-            
-            // ลบข้อความหลังจาก 5 วินาที
-            setTimeout(() => {
-                statusDiv.innerHTML = '';
-            }, 5000);
-        }
-
-        // เพิ่มสินค้า
-        async function addItem() {
-            const productCode = document.getElementById('productCode').value.trim();
-            const productName = document.getElementById('productName').value.trim();
-            const quantity = parseInt(document.getElementById('quantity').value) || 1;
-            const action = document.getElementById('action').value;
-
-            // ตรวจสอบข้อมูล
-            if (!productCode) {
-                showStatus('กรุณากรอกรหัสสินค้า', 'error');
-                document.getElementById('productCode').focus();
-                return;
-            }
-
-            if (!productName) {
-                showStatus('กรุณากรอกชื่อสินค้า', 'error');
-                document.getElementById('productName').focus();
-                return;
-            }
-
-            if (quantity <= 0) {
-                showStatus('จำนวนต้องมากกว่า 0', 'error');
-                document.getElementById('quantity').focus();
-                return;
-            }
-
-            try {
-                // คำนวณจำนวนใหม่
-                let newQuantity = 0;
-                const currentItem = inventory[productCode];
-                const currentQty = currentItem ? currentItem.quantity : 0;
-
-                switch (action) {
-                    case 'add':
-                        newQuantity = currentQty + quantity;
-                        break;
-                    case 'set':
-                        newQuantity = quantity;
-                        break;
-                    case 'subtract':
-                        newQuantity = Math.max(0, currentQty - quantity);
-                        break;
-                }
-
-                // สร้างข้อมูลสินค้า
-                const itemData = {
-                    code: productCode,
-                    name: productName,
-                    quantity: newQuantity,
-                    lastUpdated: new Date().toISOString(),
-                    lastDevice: currentDeviceName,
-                    deviceId: deviceId,
-                    action: action,
-                    previousQuantity: currentQty
-                };
-
-                // บันทึกข้อมูล
-                if (window.firebaseDB && inventoryRef) {
-                    // บันทึกไป Firebase
-                    const itemRef = window.firebaseRef(window.firebaseDB, `stores/${currentStoreId}/inventory/${productCode}`);
-                    await window.firebaseSet(itemRef, itemData);
-                } else {
-                    // บันทึกไป localStorage
-                    inventory[productCode] = itemData;
-                    localStorage.setItem(`inventory_${currentStoreId}`, JSON.stringify(inventory));
-                    updateDisplay();
-                }
-
-                // แสดงข้อความสำเร็จ
-                let actionText = '';
-                switch (action) {
-                    case 'add': actionText = `เพิ่ม ${quantity} หน่วย`; break;
-                    case 'set': actionText = `ตั้งเป็น ${quantity} หน่วย`; break;
-                    case 'subtract': actionText = `ลด ${quantity} หน่วย`; break;
-                }
-                
-                showStatus(`✅ บันทึกสำเร็จ: ${productName} (${actionText})`, 'success');
-
-                // เคลียร์ฟอร์ม
-                clearForm();
-
-            } catch (error) {
-                console.error('Error adding item:', error);
-                showStatus('เกิดข้อผิดพลาด: ' + error.message, 'error');
-            }
-        }
-
-        // อัปเดตการแสดงผล
-        function updateDisplay() {
-            const inventoryItems = document.getElementById('inventoryItems');
-            const totalItems = document.getElementById('totalItems');
-            const totalQuantity = document.getElementById('totalQuantity');
-
-            // คำนวณสถิติ
-            const items = Object.values(inventory);
-            const itemCount = items.length;
-            const totalQty = items.reduce((sum, item) => sum + (item.quantity || 0), 0);
-
-            totalItems.textContent = itemCount.toString();
-            totalQuantity.textContent = totalQty.toString();
-
-            // แสดงรายการสินค้า
-            if (itemCount === 0) {
-                inventoryItems.innerHTML = `
-                    <p style="text-align: center; color: #999; padding: 40px; font-size: 18px;">
-                        ยังไม่มีสินค้าในระบบ<br>
-                        <small>เพิ่มสินค้าเพื่อเริ่มต้นการนับสินค้า</small>
-                    </p>
-                `;
-                return;
-            }
-
-            // เรียงตามเวลาอัปเดตล่าสุด
-            const sortedItems = items.sort((a, b) => 
-                new Date(b.lastUpdated) - new Date(a.lastUpdated)
-            );
-
-            let html = '';
-            sortedItems.forEach(item => {
-                const updateTime = new Date(item.lastUpdated);
-                const isNew = Date.now() - updateTime.getTime() < 5000; // ใหม่ถ้าไม่เกิน 5 วินาที
-                
-                // กำหนดสีตามจำนวน
-                let quantityClass = 'item-quantity';
-                if (item.quantity === 0) {
-                    quantityClass += ' text-danger';
-                } else if (item.quantity < 10) {
-                    quantityClass += ' text-warning';
-                }
-
-                html += `
-                    <div class="inventory-item ${isNew ? 'new-item' : ''}" data-code="${item.code}">
-                        ${isNew ? '<span class="realtime-badge">LIVE</span>' : ''}
-                        
-                        <div class="item-info">
-                            <div style="font-size: 1.2em; font-weight: bold; color: #333;">
-                                ${item.name}
-                            </div>
-                            <div class="item-code">${item.code}</div>
-                            <div class="item-datetime">
-                                📅 ${updateTime.toLocaleDateString('th-TH')} 
-                                🕒 ${updateTime.toLocaleTimeString('th-TH')}
-                            </div>
-                            <div class="item-device">
-                                📱 ${item.lastDevice} 
-                                ${item.action ? `(${getActionText(item.action, item.previousQuantity || 0, item.quantity)})` : ''}
-                            </div>
-                        </div>
-
-                        <div class="${quantityClass}">
-                            ${item.quantity.toLocaleString()} หน่วย
-                        </div>
-
-                        <div style="display: flex; flex-direction: column; gap: 5px;">
-                            <button class="btn btn-primary" onclick="editItem('${item.code}')" style="padding: 8px 16px; font-size: 14px;">
-                                ✏️ แก้ไข
-                            </button>
-                            <button class="btn btn-danger" onclick="deleteItem('${item.code}')" style="padding: 8px 16px; font-size: 14px;">
-                                🗑️ ลบ
-                            </button>
-                        </div>
-                    </div>
-                `;
-            });
-
-            inventoryItems.innerHTML = html;
-
-            // ลบ highlight หลังจาก 3 วินาที
-            setTimeout(() => {
-                document.querySelectorAll('.new-item').forEach(el => {
-                    el.classList.remove('new-item');
-                });
-            }, 3000);
-        }
-
-        // แปลงการกระทำเป็นข้อความ
-        function getActionText(action, previousQty, currentQty) {
-            const diff = currentQty - previousQty;
-            switch (action) {
-                case 'add': return `+${Math.abs(diff)}`;
-                case 'subtract': return `-${Math.abs(diff)}`;
-                case 'set': return `ตั้งใหม่`;
-                default: return '';
-            }
-        }
-
-        // แก้ไขสินค้า
-        function editItem(productCode) {
-            const item = inventory[productCode];
-            if (!item) return;
-
-            // ใส่ข้อมูลเดิมในฟอร์ม
-            document.getElementById('productCode').value = item.code;
-            document.getElementById('productName').value = item.name;
-            document.getElementById('quantity').value = '1';
-            document.getElementById('action').value = 'set';
-
-            // เลื่อนไปหาฟอร์ม
-            document.getElementById('inputSection').scrollIntoView({ behavior: 'smooth' });
-            document.getElementById('quantity').focus();
-
-            showStatus(`📝 แก้ไขสินค้า: ${item.name}`, 'info');
-        }
-
-        // ลบสินค้า
-        async function deleteItem(productCode) {
-            const item = inventory[productCode];
-            if (!item) return;
-
-            if (!confirm(`ต้องการลบสินค้า "${item.name}" ใช่หรือไม่?`)) {
-                return;
-            }
-
-            try {
-                if (window.firebaseDB && inventoryRef) {
-                    // ลบจาก Firebase
-                    const itemRef = window.firebaseRef(window.firebaseDB, `stores/${currentStoreId}/inventory/${productCode}`);
-                    await window.firebaseRemove(itemRef);
-                } else {
-                    // ลบจาก localStorage
-                    delete inventory[productCode];
-                    localStorage.setItem(`inventory_${currentStoreId}`, JSON.stringify(inventory));
-                    updateDisplay();
-                }
-
-                showStatus(`🗑️ ลบสินค้า "${item.name}" แล้ว`, 'success');
-
-            } catch (error) {
-                console.error('Error deleting item:', error);
-                showStatus('เกิดข้อผิดพลาดในการลบ: ' + error.message, 'error');
-            }
-        }
-
-        // เคลียร์ฟอร์ม
-        function clearForm() {
-            document.getElementById('productCode').value = '';
-            document.getElementById('productName').value = '';
-            document.getElementById('quantity').value = '1';
-            document.getElementById('action').value = 'add';
-            
-            // โฟกัสไปที่รหัสสินค้า
-            document.getElementById('productCode').focus();
-        }
-
-        // ลบข้อมูลทั้งหมด
-        async function clearAll() {
-            if (!confirm('ต้องการลบข้อมูลทั้งหมดใช่หรือไม่? การกระทำนี้ไม่สามารถยกเลิกได้!')) {
-                return;
-            }
-
-            try {
-                if (window.firebaseDB && inventoryRef) {
-                    // ลบทั้งหมดจาก Firebase
-                    await window.firebaseRemove(inventoryRef);
-                } else {
-                    // ลบจาก localStorage
-                    inventory = {};
-                    localStorage.removeItem(`inventory_${currentStoreId}`);
-                    updateDisplay();
-                }
-
-                showStatus('🗑️ ลบข้อมูลทั้งหมดแล้ว', 'success');
-
-            } catch (error) {
-                console.error('Error clearing all:', error);
-                showStatus('เกิดข้อผิดพลาดในการลบ: ' + error.message, 'error');
-            }
-        }
-
-        // ส่งออกข้อมูล CSV
-        function exportData() {
-            const items = Object.values(inventory);
-            
-            if (items.length === 0) {
-                showStatus('ไม่มีข้อมูลให้ส่งออก', 'error');
-                return;
-            }
-
-            // สร้าง CSV
-            let csv = 'รหัสสินค้า,ชื่อสินค้า,จำนวน,วันที่อัปเดต,เครื่องที่อัปเดต\n';
-            
-            items.forEach(item => {
-                const date = new Date(item.lastUpdated).toLocaleString('th-TH');
-                csv += `"${item.code}","${item.name}","${item.quantity}","${date}","${item.lastDevice || 'ไม่ทราบ'}"\n`;
-            });
-
-            // ดาวน์โหลดไฟล์
-            const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            const url = URL.createObjectURL(blob);
-            
-            link.setAttribute('href', url);
-            link.setAttribute('download', `inventory_${currentStoreId}_${new Date().toISOString().split('T')[0]}.csv`);
-            link.style.visibility = 'hidden';
-            
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-
-            showStatus('📤 ส่งออกข้อมูล CSV สำเร็จ', 'success');
-        }
-
-        // พิมพ์รายงาน
-        function printData() {
-            const items = Object.values(inventory);
-            
-            if (items.length === 0) {
-                showStatus('ไม่มีข้อมูลให้พิมพ์', 'error');
-                return;
-            }
-
-            // สร้างหน้าต่างใหม่สำหรับพิมพ์
-            const printWindow = window.open('', '_blank');
-            
-            let html = `
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="UTF-8">
-                    <title>รายงานสินค้า - ${currentStoreId}</title>
-                    <style>
-                        body { font-family: 'Sarabun', Arial, sans-serif; margin: 20px; }
-                        .header { text-align: center; margin-bottom: 30px; }
-                        .info { margin-bottom: 20px; }
-                        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-                        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
-                        th { background-color: #f2f2f2; font-weight: bold; }
-                        .summary { margin-top: 30px; padding: 15px; background-color: #f8f9fa; border-radius: 5px; }
-                        @media print {
-                            .no-print { display: none; }
-                        }
-                    </style>
-                </head>
-                <body>
-                    <div class="header">
-                        <h1>📊 รายงานสินค้า</h1>
-                        <h2>ร้าน: ${currentStoreId}</h2>
-                    </div>
-                    
-                    <div class="info">
-                        <p><strong>วันที่พิมพ์:</strong> ${new Date().toLocaleString('th-TH')}</p>
-                        <p><strong>พิมพ์โดย:</strong> ${currentDeviceName}</p>
-                        <p><strong>จำนวนรายการ:</strong> ${items.length} รายการ</p>
-                        <p><strong>จำนวนสินค้ารวม:</strong> ${items.reduce((sum, item) => sum + item.quantity, 0).toLocaleString()} หน่วย</p>
-                    </div>
-                    
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>ลำดับ</th>
-                                <th>รหัสสินค้า</th>
-                                <th>ชื่อสินค้า</th>
-                                <th>จำนวน</th>
-                                <th>วันที่อัปเดตล่าสุด</th>
-                                <th>อัปเดตโดย</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-            `;
-
-            items.sort((a, b) => a.name.localeCompare(b.name, 'th')).forEach((item, index) => {
-                const date = new Date(item.lastUpdated).toLocaleString('th-TH');
-                html += `
-                    <tr>
-                        <td>${index + 1}</td>
-                        <td>${item.code}</td>
-                        <td>${item.name}</td>
-                        <td style="text-align: right;">${item.quantity.toLocaleString()}</td>
-                        <td>${date}</td>
-                        <td>${item.lastDevice || 'ไม่ทราบ'}</td>
-                    </tr>
-                `;
-            });
-
-            html += `
-                        </tbody>
-                    </table>
-                    
-                    <div class="summary">
-                        <h3>สรุป</h3>
-                        <p>รายการสินค้าทั้งหมด: <strong>${items.length}</strong> รายการ</p>
-                        <p>จำนวนสินค้ารวมทั้งหมด: <strong>${items.reduce((sum, item) => sum + item.quantity, 0).toLocaleString()}</strong> หน่วย</p>
-                        <p>สินค้าที่หมดสต็อก: <strong>${items.filter(item => item.quantity === 0).length}</strong> รายการ</p>
-                        <p>สินค้าที่เหลือน้อย (< 10): <strong>${items.filter(item => item.quantity < 10 && item.quantity > 0).length}</strong> รายการ</p>
-                    </div>
-                    
-                    <div class="no-print" style="margin-top: 30px; text-align: center;">
-                        <button onclick="window.print()" style="padding: 10px 20px; font-size: 16px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">🖨️ พิมพ์</button>
-                        <button onclick="window.close()" style="padding: 10px 20px; font-size: 16px; background: #6c757d; color: white; border: none; border-radius: 5px; cursor: pointer; margin-left: 10px;">❌ ปิด</button>
-                    </div>
-                </body>
-                </html>
-            `;
-
-            printWindow.document.write(html);
-            printWindow.document.close();
-
-            showStatus('🖨️ เปิดหน้าต่างพิมพ์แล้ว', 'success');
-        }
-
-        // อัปเดตข้อมูลผู้ใช้ออนไลน์ทุก 30 วินาที
-        setInterval(async () => {
-            if (onlineUsersRef && window.firebaseDB) {
-                try {
-                    await window.firebaseSet(onlineUsersRef, {
-                        name: currentDeviceName,
-                        deviceId: deviceId,
-                        lastSeen: window.firebaseServerTimestamp(),
-                        userAgent: navigator.userAgent.substring(0, 50)
-                    });
-                } catch (error) {
-                    console.log('Failed to update online status:', error);
-                }
-            }
-        }, 30000);
-
-    </script>
-</body>
-</html>
+  );
+}
