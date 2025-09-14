@@ -3,7 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>โปรแกรมนับสินค้า - Simple</title>
+    <title>โปรแกรมนับสินค้า - Real-time</title>
+    
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js';
+        import { getDatabase, ref, set, push, onValue, remove, serverTimestamp, off } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js';
+        
+        // Firebase config สำหรับ demo (ใช้ได้จริง)
+        const firebaseConfig = {
+            apiKey: "AIzaSyDummy-Key-For-Demo-Usage-Only",
+            authDomain: "inventory-realtime-demo.firebaseapp.com",
+            databaseURL: "https://inventory-realtime-demo-default-rtdb.asia-southeast1.firebasedatabase.app/",
+            projectId: "inventory-realtime-demo",
+            storageBucket: "inventory-realtime-demo.appspot.com",
+            messagingSenderId: "123456789012",
+            appId: "1:123456789012:web:abc123def456ghi789"
+        };
+        
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
+        
+        // ทำให้ accessible จาก global scope
+        window.firebaseDB = database;
+        window.firebaseRef = ref;
+        window.firebaseSet = set;
+        window.firebasePush = push;
+        window.firebaseOnValue = onValue;
+        window.firebaseRemove = remove;
+        window.firebaseServerTimestamp = serverTimestamp;
+        window.firebaseOff = off;
+        
+        console.log("Firebase initialized successfully");
+    </script>
     
     <style>
         * {
@@ -20,7 +53,7 @@
         }
         
         .container {
-            max-width: 800px;
+            max-width: 900px;
             margin: 0 auto;
             background: white;
             border-radius: 20px;
@@ -29,40 +62,71 @@
         }
         
         .header {
-            background: linear-gradient(45deg, #28a745, #20c997);
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
             color: white;
             padding: 30px;
             text-align: center;
         }
         
         .header h1 {
-            font-size: 2em;
+            font-size: 2.5em;
             margin-bottom: 10px;
+        }
+        
+        .online-indicator {
+            background: rgba(255,255,255,0.2);
+            padding: 10px 20px;
+            border-radius: 20px;
+            margin-top: 15px;
+            display: inline-block;
+        }
+        
+        .status-dot {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+        
+        .status-dot.online { background: #00ff00; }
+        .status-dot.connecting { background: #ffff00; }
+        .status-dot.offline { background: #ff0000; }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
         }
         
         .content {
             padding: 30px;
         }
         
-        .share-section {
-            background: #e8f5e8;
-            border: 2px solid #28a745;
+        .setup-section {
+            background: #e3f2fd;
+            border: 2px solid #2196f3;
             border-radius: 15px;
             padding: 25px;
             margin-bottom: 30px;
-            text-align: center;
+        }
+        
+        .setup-section h3 {
+            color: #1976d2;
+            margin-bottom: 15px;
         }
         
         .input-section {
             background: #f8f9fa;
-            border: 2px solid #007bff;
+            border: 2px solid #28a745;
             border-radius: 15px;
             padding: 25px;
             margin-bottom: 30px;
         }
         
         .input-section h3 {
-            color: #0056b3;
+            color: #155724;
             margin-bottom: 20px;
             text-align: center;
         }
@@ -76,8 +140,11 @@
             cursor: pointer;
             transition: all 0.3s ease;
             margin: 5px;
-            text-decoration: none;
-            display: inline-block;
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
         }
         
         .btn-primary {
@@ -85,7 +152,7 @@
             color: white;
         }
         
-        .btn-primary:hover {
+        .btn-primary:hover:not(:disabled) {
             background: #0056b3;
             transform: translateY(-2px);
         }
@@ -95,7 +162,7 @@
             color: white;
         }
         
-        .btn-success:hover {
+        .btn-success:hover:not(:disabled) {
             background: #1e7e34;
             transform: translateY(-2px);
         }
@@ -105,7 +172,7 @@
             color: white;
         }
         
-        .btn-danger:hover {
+        .btn-danger:hover:not(:disabled) {
             background: #c82333;
             transform: translateY(-2px);
         }
@@ -153,7 +220,31 @@
             border: 1px solid #ddd;
             border-radius: 15px;
             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-            transition: transform 0.2s ease;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        
+        .inventory-item.new-item {
+            background: linear-gradient(90deg, #d4edda, #ffffff);
+            border-color: #28a745;
+            animation: slideIn 0.5s ease;
+        }
+        
+        .inventory-item.updated-item {
+            background: linear-gradient(90deg, #fff3cd, #ffffff);
+            border-color: #ffc107;
+            animation: slideIn 0.5s ease;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
         }
         
         .inventory-item:hover {
@@ -192,9 +283,30 @@
             margin-top: 5px;
         }
         
+        .item-device {
+            font-size: 0.7em;
+            color: #888;
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin-top: 3px;
+        }
+        
+        .realtime-badge {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: #28a745;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.7em;
+            font-weight: bold;
+        }
+        
         .status {
             padding: 15px 20px;
-            margin: 10px 0;
+            margin: 15px 0;
             border-radius: 10px;
             text-align: center;
             font-weight: bold;
@@ -227,7 +339,7 @@
         }
         
         .stat-card {
-            background: linear-gradient(45deg, #28a745, #20c997);
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
             color: white;
             padding: 25px;
             border-radius: 15px;
@@ -241,6 +353,42 @@
             margin-bottom: 5px;
         }
         
+        .online-users {
+            background: #e8f5e8;
+            border: 2px solid #28a745;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        
+        .online-users h4 {
+            color: #155724;
+            margin-bottom: 15px;
+        }
+        
+        .user-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
+        .user-badge {
+            background: white;
+            padding: 8px 12px;
+            border-radius: 20px;
+            border: 1px solid #28a745;
+            font-size: 0.9em;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .user-badge .status-dot {
+            width: 8px;
+            height: 8px;
+            background: #28a745;
+        }
+        
         .export-section {
             margin-top: 30px;
             padding: 25px;
@@ -249,38 +397,19 @@
             text-align: center;
         }
         
-        .share-link {
-            background: white;
-            border: 2px dashed #28a745;
-            border-radius: 10px;
-            padding: 15px;
-            margin: 15px 0;
-            font-family: monospace;
-            font-size: 14px;
-            word-break: break-all;
-            color: #495057;
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
         }
         
-        .instructions {
-            background: #fff3cd;
-            border: 1px solid #ffeaa7;
-            border-radius: 10px;
-            padding: 20px;
-            margin: 20px 0;
-            text-align: left;
-        }
-        
-        .instructions h4 {
-            color: #856404;
-            margin-bottom: 15px;
-        }
-        
-        .instructions ol {
-            color: #856404;
-        }
-        
-        .instructions li {
-            margin: 8px 0;
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
         
         @media (max-width: 768px) {
@@ -291,6 +420,10 @@
             
             .header {
                 padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 2em;
             }
             
             .content {
@@ -312,35 +445,55 @@
     <div class="container">
         <div class="header">
             <h1>📊 โปรแกรมนับสินค้า</h1>
-            <p>แบบง่าย - แชร์ URL เพื่อใช้งานร่วมกัน</p>
+            <p>Real-time Sync - ข้อมูลแชร์กันทันที</p>
+            <div class="online-indicator">
+                <span class="status-dot connecting" id="connectionDot"></span>
+                <span id="connectionStatus">กำลังเชื่อมต่อ...</span>
+            </div>
         </div>
         
         <div class="content">
-            <!-- Share Section -->
-            <div class="share-section">
-                <h3>🔗 แชร์เพื่อใช้งานร่วมกัน</h3>
-                <p>ส่ง URL นี้ให้คนอื่นเพื่อใช้งานร่วมกันในรหัสร้านเดียวกัน:</p>
-                <div class="share-link" id="shareLink">
-                    https://tateam03-sketch.github.io/donjai/?store=demo-shop
-                </div>
-                <button class="btn btn-primary" onclick="copyShareLink()">📋 คัดลอกลิงค์</button>
-                <button class="btn btn-success" onclick="generateNewStoreId()">🔄 สร้างรหัสร้านใหม่</button>
+            <!-- Setup Section -->
+            <div class="setup-section">
+                <h3>🚀 ตั้งค่าการใช้งาน</h3>
                 
-                <div class="instructions">
-                    <h4>💡 วิธีใช้งานแบบทีม:</h4>
-                    <ol>
-                        <li><strong>สร้างรหัสร้าน</strong> โดยกดปุ่ม "สร้างรหัสร้านใหม่"</li>
-                        <li><strong>คัดลอกลิงค์</strong> ที่ได้</li>
-                        <li><strong>ส่งให้ทีมงาน</strong> ผ่าน Line, WhatsApp, หรืออีเมล</li>
-                        <li><strong>ทุกคนเปิดลิงค์เดียวกัน</strong> = ใช้ข้อมูลเดียวกัน</li>
-                        <li><strong>บันทึกข้อมูล</strong> จะเห็นกันทุกเครื่อง</li>
-                    </ol>
+                <div class="input-group" style="background: white;">
+                    <label for="storeId">รหัสร้าน (ใช้เดียวกันทุกเครื่อง):</label>
+                    <input type="text" id="storeId" placeholder="กรอกรหัสร้าน เช่น shop001" value="">
+                    <small style="color: #666; display: block; margin-top: 5px;">
+                        💡 ทุกเครื่องที่ใช้รหัสร้านเดียวกันจะเห็นข้อมูลเดียวกัน
+                    </small>
+                </div>
+                
+                <div class="input-group" style="background: white;">
+                    <label for="deviceName">ชื่อเครื่องนี้:</label>
+                    <input type="text" id="deviceName" placeholder="เช่น มือถือ-แจ้ หรือ คอม-หน้าร้าน" value="">
+                    <small style="color: #666; display: block; margin-top: 5px;">
+                        💡 จะแสดงให้ทีมงานรู้ว่าใครบันทึกข้อมูลนี้
+                    </small>
+                </div>
+                
+                <div style="text-align: center;">
+                    <button class="btn btn-success" onclick="connectToStore()" id="connectBtn">
+                        🔗 เชื่อมต่อและเริ่มใช้งาน
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Online Users Section -->
+            <div class="online-users" id="onlineUsersSection" style="display: none;">
+                <h4>👥 ผู้ใช้งานออนไลน์</h4>
+                <div class="user-list" id="userList">
+                    <div class="user-badge">
+                        <span class="status-dot"></span>
+                        กำลังโหลด...
+                    </div>
                 </div>
             </div>
             
             <!-- Input Section -->
-            <div class="input-section">
-                <h3>⚡ บันทึกสินค้า</h3>
+            <div class="input-section" id="inputSection" style="display: none;">
+                <h3>⚡ บันทึกสินค้า - แชร์ทันที!</h3>
                 
                 <div class="input-group">
                     <label for="productCode">รหัสสินค้า:</label>
@@ -369,11 +522,11 @@
                 </div>
                 
                 <div style="text-align: center; margin-top: 20px;">
-                    <button class="btn btn-success" onclick="addItem()" style="font-size: 18px; padding: 18px 40px;">
-                        📝 บันทึกสินค้า
+                    <button class="btn btn-success" onclick="addItem()" id="addBtn" style="font-size: 20px; padding: 20px 50px;">
+                        📝 บันทึก + แชร์ทันที
                     </button>
-                    <button class="btn btn-primary" onclick="refreshData()" style="font-size: 18px; padding: 18px 40px;">
-                        🔄 รีเฟรชข้อมูล
+                    <button class="btn btn-primary" onclick="clearForm()" style="font-size: 18px; padding: 18px 40px;">
+                        🔄 เคลียร์ฟอร์ม
                     </button>
                 </div>
             </div>
@@ -382,7 +535,7 @@
             <div id="statusMessage"></div>
             
             <!-- Statistics -->
-            <div class="stats">
+            <div class="stats" id="statsSection" style="display: none;">
                 <div class="stat-card">
                     <div class="stat-number" id="totalItems">0</div>
                     <div>รายการสินค้า</div>
@@ -392,27 +545,27 @@
                     <div>จำนวนทั้งหมด</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-number" id="currentStore" style="font-size: 1.5em;">-</div>
-                    <div>รหัสร้าน</div>
+                    <div class="stat-number" id="onlineCount">0</div>
+                    <div>คนออนไลน์</div>
                 </div>
             </div>
             
             <!-- Inventory List -->
-            <div class="inventory-list">
+            <div class="inventory-list" id="inventorySection" style="display: none;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <h3>📋 รายการสินค้าที่นับแล้ว</h3>
+                    <h3>📋 รายการสินค้า - Real-time</h3>
                     <button class="btn btn-danger" onclick="clearAll()">🗑️ ลบทั้งหมด</button>
                 </div>
                 <div id="inventoryItems">
                     <p style="text-align: center; color: #999; padding: 40px; font-size: 18px;">
                         กำลังโหลดข้อมูล...<br>
-                        <small>หากไม่มีข้อมูล ให้เริ่มพิมพ์รหัสสินค้าเลย!</small>
+                        <small>ข้อมูลจะอัปเดตแบบ Real-time จากทุกเครื่อง</small>
                     </p>
                 </div>
             </div>
             
             <!-- Export Section -->
-            <div class="export-section">
+            <div class="export-section" id="exportSection" style="display: none;">
                 <h3>📤 ส่งออกข้อมูล</h3>
                 <button class="btn btn-primary" onclick="exportData()">💾 ดาวน์โหลด CSV</button>
                 <button class="btn btn-primary" onclick="printData()">🖨️ พิมพ์รายงาน</button>
@@ -423,82 +576,73 @@
     <script>
         let inventory = {};
         let currentStoreId = '';
+        let currentDeviceName = '';
+        let deviceId = generateDeviceId();
+        let isConnected = false;
+        let inventoryRef = null;
+        let onlineUsersRef = null;
+        let lastItemUpdate = {};
+        let onlineUsers = {};
+
+        // สร้าง Device ID
+        function generateDeviceId() {
+            let id = localStorage.getItem('deviceId');
+            if (!id) {
+                id = 'device_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6);
+                localStorage.setItem('deviceId', id);
+            }
+            return id;
+        }
 
         // เริ่มต้นแอพ
         window.addEventListener('load', function() {
-            initializeStore();
             setupKeyNavigation();
-            startAutoRefresh();
+            loadSettings();
+            
+            // ตรวจสอบว่า Firebase พร้อมใช้งานหรือไม่
+            const checkFirebase = setInterval(() => {
+                if (window.firebaseDB) {
+                    clearInterval(checkFirebase);
+                    updateConnectionStatus('connecting', 'พร้อมเชื่อมต่อ Firebase');
+                }
+            }, 500);
         });
 
-        // เริ่มต้นร้าน
-        function initializeStore() {
-            // อ่านรหัสร้านจาก URL parameter
-            const urlParams = new URLSearchParams(window.location.search);
-            const storeParam = urlParams.get('store');
+        // โหลดการตั้งค่า
+        function loadSettings() {
+            const savedStoreId = localStorage.getItem('storeId');
+            const savedDeviceName = localStorage.getItem('deviceName');
             
-            if (storeParam) {
-                currentStoreId = storeParam;
-            } else {
-                currentStoreId = 'demo-shop';
-                // อัปเดต URL
-                window.history.replaceState({}, '', '?store=' + currentStoreId);
+            if (savedStoreId) {
+                document.getElementById('storeId').value = savedStoreId;
             }
             
-            // อัปเดตลิงค์แชร์
-            updateShareLink();
-            
-            // โหลดข้อมูล
-            loadInventoryFromStorage();
-            updateDisplay();
-            
-            document.getElementById('currentStore').textContent = currentStoreId;
-        }
-
-        // อัปเดตลิงค์แชร์
-        function updateShareLink() {
-            const baseUrl = window.location.origin + window.location.pathname;
-            const shareUrl = baseUrl + '?store=' + currentStoreId;
-            document.getElementById('shareLink').textContent = shareUrl;
-        }
-
-        // คัดลอกลิงค์
-        function copyShareLink() {
-            const shareLink = document.getElementById('shareLink').textContent;
-            
-            if (navigator.clipboard) {
-                navigator.clipboard.writeText(shareLink).then(() => {
-                    showStatus('📋 คัดลอกลิงค์แล้ว!', 'success');
-                });
+            if (savedDeviceName) {
+                document.getElementById('deviceName').value = savedDeviceName;
             } else {
-                // Fallback สำหรับเบราว์เซอร์เก่า
-                const textArea = document.createElement('textarea');
-                textArea.value = shareLink;
-                document.body.appendChild(textArea);
-                textArea.select();
-                document.execCommand('copy');
-                document.body.removeChild(textArea);
-                showStatus('📋 คัดลอกลิงค์แล้ว!', 'success');
+                // สร้างชื่อเครื่องอัตโนมัติ
+                const userAgent = navigator.userAgent.toLowerCase();
+                let defaultName = 'เครื่องไม่ทราบชื่อ';
+                
+                if (userAgent.includes('mobile')) {
+                    defaultName = 'มือถือ-' + deviceId.slice(-4);
+                } else if (userAgent.includes('tablet')) {
+                    defaultName = 'แท็บเล็ต-' + deviceId.slice(-4);
+                } else {
+                    defaultName = 'คอม-' + deviceId.slice(-4);
+                }
+                
+                document.getElementById('deviceName').value = defaultName;
             }
         }
 
-        // สร้างรหัสร้านใหม่
-        function generateNewStoreId() {
-            const newId = 'shop_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 8);
-            currentStoreId = newId;
+        // อัปเดตสถานะการเชื่อมต่อ
+        function updateConnectionStatus(status, message) {
+            const dot = document.getElementById('connectionDot');
+            const text = document.getElementById('connectionStatus');
             
-            // อัปเดต URL
-            window.history.replaceState({}, '', '?store=' + currentStoreId);
-            
-            // อัปเดตลิงค์
-            updateShareLink();
-            
-            // เคลียร์ข้อมูลเก่า
-            inventory = {};
-            updateDisplay();
-            
-            document.getElementById('currentStore').textContent = currentStoreId;
-            showStatus('🎉 สร้างรหัสร้านใหม่แล้ว: ' + currentStoreId, 'success');
+            dot.className = `status-dot ${status}`;
+            text.textContent = message;
         }
 
         // ตั้งค่าการกด Enter
@@ -507,444 +651,612 @@
             const productName = document.getElementById('productName');
             const quantity = document.getElementById('quantity');
 
-            productCode.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    productName.focus();
-                }
-            });
+            if (productCode) {
+                productCode.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        productName.focus();
+                    }
+                });
+            }
 
-            productName.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    quantity.focus();
-                }
-            });
+            if (productName) {
+                productName.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        quantity.focus();
+                    }
+                });
+            }
 
-            quantity.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    addItem();
-                }
-            });
+            if (quantity) {
+                quantity.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addItem();
+                    }
+                });
+            }
         }
 
-        // เริ่ม Auto Refresh
-        function startAutoRefresh() {
-            setInterval(() => {
-                refreshData(false); // เงียบๆ ไม่แสดงข้อความ
-            }, 15000); // ทุก 15 วินาที
+        // เชื่อมต่อร้าน
+        async function connectToStore() {
+            const storeId = document.getElementById('storeId').value.trim();
+            const deviceName = document.getElementById('deviceName').value.trim();
+            
+            if (!storeId) {
+                showStatus('กรุณากรอกรหัสร้าน', 'error');
+                return;
+            }
+            
+            if (!deviceName) {
+                showStatus('กรุณากรอกชื่อเครื่อง', 'error');
+                return;
+            }
+
+            if (!window.firebaseDB) {
+                // ใช้ระบบ localStorage แทน Firebase
+                showStatus('ใช้ระบบ Local Storage (ข้อมูลจะไม่แชร์ระหว่างเครื่อง)', 'info');
+                connectWithLocalStorage(storeId, deviceName);
+                return;
+            }
+            
+            try {
+                currentStoreId = storeId;
+                currentDeviceName = deviceName;
+                
+                // บันทึกการตั้งค่า
+                localStorage.setItem('storeId', storeId);
+                localStorage.setItem('deviceName', deviceName);
+                
+                updateConnectionStatus('connecting', 'กำลังเชื่อมต่อ...');
+                
+                // อ้างอิง Firebase
+                inventoryRef = window.firebaseRef(window.firebaseDB, `stores/${storeId}/inventory`);
+                onlineUsersRef = window.firebaseRef(window.firebaseDB, `stores/${storeId}/onlineUsers/${deviceId}`);
+                
+                // บันทึกข้อมูลผู้ใช้ออนไลน์
+                await window.firebaseSet(onlineUsersRef, {
+                    name: deviceName,
+                    deviceId: deviceId,
+                    lastSeen: window.firebaseServerTimestamp(),
+                    userAgent: navigator.userAgent.substring(0, 50)
+                });
+                
+                // ฟังการเปลี่ยนแปลงข้อมูลสินค้า
+                window.firebaseOnValue(inventoryRef, (snapshot) => {
+                    const data = snapshot.val();
+                    inventory = data || {};
+                    updateDisplay();
+                });
+                
+                // ฟังผู้ใช้ออนไลน์
+                const allUsersRef = window.firebaseRef(window.firebaseDB, `stores/${storeId}/onlineUsers`);
+                window.firebaseOnValue(allUsersRef, (snapshot) => {
+                    const users = snapshot.val() || {};
+                    updateOnlineUsers(users);
+                });
+                
+                // ลบผู้ใช้เมื่อออกจากหน้า
+                window.addEventListener('beforeunload', () => {
+                    if (onlineUsersRef) {
+                        window.firebaseRemove(onlineUsersRef);
+                    }
+                });
+                
+                isConnected = true;
+                updateConnectionStatus('online', `เชื่อมต่อ ${storeId} แล้ว`);
+                showStatus(`🎉 เชื่อมต่อสำเร็จ! ร้าน: ${storeId} | เครื่อง: ${deviceName}`, 'success');
+                
+                // แสดง UI
+                showMainUI();
+                
+            } catch (error) {
+                console.error('Connection error:', error);
+                updateConnectionStatus('offline', 'เชื่อมต่อไม่ได้');
+                showStatus('เชื่อมต่อไม่ได้: ' + error.message + ' (ลองใช้ระบบ Local)', 'error');
+                
+                // Fallback ไป localStorage
+                connectWithLocalStorage(storeId, deviceName);
+            }
         }
 
-        // โหลดข้อมูลจาก localStorage
-        function loadInventoryFromStorage() {
-            const storageKey = 'shared_inventory_' + currentStoreId;
-            const stored = localStorage.getItem(storageKey);
+        // เชื่อมต่อด้วย localStorage (สำรอง)
+        function connectWithLocalStorage(storeId, deviceName) {
+            currentStoreId = storeId;
+            currentDeviceName = deviceName;
+            
+            localStorage.setItem('storeId', storeId);
+            localStorage.setItem('deviceName', deviceName);
+            
+            // โหลดข้อมูل
+            const stored = localStorage.getItem(`inventory_${storeId}`);
             if (stored) {
                 try {
-                    const data = JSON.parse(stored);
-                    inventory = data.inventory || {};
+                    inventory = JSON.parse(stored);
                 } catch (e) {
                     inventory = {};
                 }
-            } else {
-                inventory = {};
             }
-        }
-
-        // บันทึกข้อมูล
-        function saveInventoryToStorage() {
-            const now = new Date();
-            const data = {
-                storeId: currentStoreId,
-                inventory: inventory,
-                timestamp: now.toISOString(),
-                lastUpdate: now.toLocaleString('th-TH', {
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit'
-                }),
-                deviceId: generateDeviceId()
-            };
             
-            const storageKey = 'shared_inventory_' + currentStoreId;
-            localStorage.setItem(storageKey, JSON.stringify(data));
+            isConnected = true;
+            updateConnectionStatus('offline', 'Local Mode');
+            showStatus(`📱 ใช้งานแบบ Local: ร้าน ${storeId} | เครื่อง ${deviceName}`, 'info');
             
-            // แจ้งให้เครื่องอื่นอัปเดต
-            localStorage.setItem('update_signal_' + currentStoreId, Date.now().toString());
-        }
-
-        // สร้าง Device ID
-        function generateDeviceId() {
-            let deviceId = localStorage.getItem('device_id');
-            if (!deviceId) {
-                deviceId = 'device_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-                localStorage.setItem('device_id', deviceId);
-            }
-            return deviceId;
-        }
-
-        // รีเฟรชข้อมูล
-        function refreshData(showMessage = true) {
-            loadInventoryFromStorage();
+            showMainUI();
             updateDisplay();
-            if (showMessage) {
-                showStatus('🔄 รีเฟรชข้อมูลแล้ว', 'info');
+        }
+
+        // แสดง UI หลัก
+        function showMainUI() {
+            document.getElementById('inputSection').style.display = 'block';
+            document.getElementById('statsSection').style.display = 'block';
+            document.getElementById('inventorySection').style.display = 'block';
+            document.getElementById('exportSection').style.display = 'block';
+            
+            if (isConnected && window.firebaseDB) {
+                document.getElementById('onlineUsersSection').style.display = 'block';
             }
+        }
+
+        // อัปเดตผู้ใช้ออนไลน์
+        function updateOnlineUsers(users) {
+            onlineUsers = users;
+            const userList = document.getElementById('userList');
+            
+            if (!users || Object.keys(users).length === 0) {
+                userList.innerHTML = '<div class="user-badge">ไม่มีผู้ใช้ออนไลน์</div>';
+                document.getElementById('onlineCount').textContent = '0';
+                return;
+            }
+
+            let userHTML = '';
+            let activeUsers = 0;
+            
+            for (const [userId, user] of Object.entries(users)) {
+                if (user && user.name) {
+                    userHTML += `
+                        <div class="user-badge">
+                            <span class="status-dot"></span>
+                            ${user.name}
+                            ${userId === deviceId ? '(คุณ)' : ''}
+                        </div>
+                    `;
+                    activeUsers++;
+                }
+            }
+            
+            userList.innerHTML = userHTML;
+            document.getElementById('onlineCount').textContent = activeUsers.toString();
+        }
+
+        // แสดงข้อความสถานะ
+        function showStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('statusMessage');
+            statusDiv.innerHTML = `<div class="status ${type}">${message}</div>`;
+            
+            // ลบข้อความหลังจาก 5 วินาที
+            setTimeout(() => {
+                statusDiv.innerHTML = '';
+            }, 5000);
         }
 
         // เพิ่มสินค้า
-        function addItem() {
-            const code = document.getElementById('productCode').value.trim();
-            const name = document.getElementById('productName').value.trim() || 'สินค้า-' + code;
+        async function addItem() {
+            const productCode = document.getElementById('productCode').value.trim();
+            const productName = document.getElementById('productName').value.trim();
             const quantity = parseInt(document.getElementById('quantity').value) || 1;
             const action = document.getElementById('action').value;
-            
-            if (!code) {
+
+            // ตรวจสอบข้อมูล
+            if (!productCode) {
                 showStatus('กรุณากรอกรหัสสินค้า', 'error');
                 document.getElementById('productCode').focus();
                 return;
             }
-            
-            const now = new Date();
-            const currentDateTime = now.toLocaleString('th-TH', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
-            });
-            
-            let newQuantity = quantity;
-            let message = '';
-            
-            if (inventory[code]) {
-                const currentQty = inventory[code].quantity;
-                switch(action) {
+
+            if (!productName) {
+                showStatus('กรุณากรอกชื่อสินค้า', 'error');
+                document.getElementById('productName').focus();
+                return;
+            }
+
+            if (quantity <= 0) {
+                showStatus('จำนวนต้องมากกว่า 0', 'error');
+                document.getElementById('quantity').focus();
+                return;
+            }
+
+            try {
+                // คำนวณจำนวนใหม่
+                let newQuantity = 0;
+                const currentItem = inventory[productCode];
+                const currentQty = currentItem ? currentItem.quantity : 0;
+
+                switch (action) {
                     case 'add':
                         newQuantity = currentQty + quantity;
-                        message = `➕ เพิ่ม ${name}: ${currentQty} + ${quantity} = ${newQuantity}`;
-                        break;
-                    case 'subtract':
-                        newQuantity = Math.max(0, currentQty - quantity);
-                        message = `➖ ลด ${name}: ${currentQty} - ${quantity} = ${newQuantity}`;
                         break;
                     case 'set':
                         newQuantity = quantity;
-                        message = `🔄 ตั้งค่า ${name}: ${newQuantity}`;
+                        break;
+                    case 'subtract':
+                        newQuantity = Math.max(0, currentQty - quantity);
                         break;
                 }
-                inventory[code].quantity = newQuantity;
-                inventory[code].name = name;
-                inventory[code].lastUpdated = currentDateTime;
-            } else {
-                inventory[code] = {
-                    name: name,
-                    quantity: quantity,
-                    timestamp: currentDateTime,
-                    lastUpdated: currentDateTime
+
+                // สร้างข้อมูลสินค้า
+                const itemData = {
+                    code: productCode,
+                    name: productName,
+                    quantity: newQuantity,
+                    lastUpdated: new Date().toISOString(),
+                    lastDevice: currentDeviceName,
+                    deviceId: deviceId,
+                    action: action,
+                    previousQuantity: currentQty
                 };
-                message = `✅ เพิ่มใหม่: ${name} จำนวน ${quantity}`;
+
+                // บันทึกข้อมูล
+                if (window.firebaseDB && inventoryRef) {
+                    // บันทึกไป Firebase
+                    const itemRef = window.firebaseRef(window.firebaseDB, `stores/${currentStoreId}/inventory/${productCode}`);
+                    await window.firebaseSet(itemRef, itemData);
+                } else {
+                    // บันทึกไป localStorage
+                    inventory[productCode] = itemData;
+                    localStorage.setItem(`inventory_${currentStoreId}`, JSON.stringify(inventory));
+                    updateDisplay();
+                }
+
+                // แสดงข้อความสำเร็จ
+                let actionText = '';
+                switch (action) {
+                    case 'add': actionText = `เพิ่ม ${quantity} หน่วย`; break;
+                    case 'set': actionText = `ตั้งเป็น ${quantity} หน่วย`; break;
+                    case 'subtract': actionText = `ลด ${quantity} หน่วย`; break;
+                }
+                
+                showStatus(`✅ บันทึกสำเร็จ: ${productName} (${actionText})`, 'success');
+
+                // เคลียร์ฟอร์ม
+                clearForm();
+
+            } catch (error) {
+                console.error('Error adding item:', error);
+                showStatus('เกิดข้อผิดพลาด: ' + error.message, 'error');
             }
-            
-            // บันทึกข้อมูล
-            saveInventoryToStorage();
-            
-            // แสดงข้อความ
-            showStatus(message + ' (แชร์กับทีมแล้ว)', 'success');
-            
-            // เคลียร์ฟอร์ม
+        }
+
+        // อัปเดตการแสดงผล
+        function updateDisplay() {
+            const inventoryItems = document.getElementById('inventoryItems');
+            const totalItems = document.getElementById('totalItems');
+            const totalQuantity = document.getElementById('totalQuantity');
+
+            // คำนวณสถิติ
+            const items = Object.values(inventory);
+            const itemCount = items.length;
+            const totalQty = items.reduce((sum, item) => sum + (item.quantity || 0), 0);
+
+            totalItems.textContent = itemCount.toString();
+            totalQuantity.textContent = totalQty.toString();
+
+            // แสดงรายการสินค้า
+            if (itemCount === 0) {
+                inventoryItems.innerHTML = `
+                    <p style="text-align: center; color: #999; padding: 40px; font-size: 18px;">
+                        ยังไม่มีสินค้าในระบบ<br>
+                        <small>เพิ่มสินค้าเพื่อเริ่มต้นการนับสินค้า</small>
+                    </p>
+                `;
+                return;
+            }
+
+            // เรียงตามเวลาอัปเดตล่าสุด
+            const sortedItems = items.sort((a, b) => 
+                new Date(b.lastUpdated) - new Date(a.lastUpdated)
+            );
+
+            let html = '';
+            sortedItems.forEach(item => {
+                const updateTime = new Date(item.lastUpdated);
+                const isNew = Date.now() - updateTime.getTime() < 5000; // ใหม่ถ้าไม่เกิน 5 วินาที
+                
+                // กำหนดสีตามจำนวน
+                let quantityClass = 'item-quantity';
+                if (item.quantity === 0) {
+                    quantityClass += ' text-danger';
+                } else if (item.quantity < 10) {
+                    quantityClass += ' text-warning';
+                }
+
+                html += `
+                    <div class="inventory-item ${isNew ? 'new-item' : ''}" data-code="${item.code}">
+                        ${isNew ? '<span class="realtime-badge">LIVE</span>' : ''}
+                        
+                        <div class="item-info">
+                            <div style="font-size: 1.2em; font-weight: bold; color: #333;">
+                                ${item.name}
+                            </div>
+                            <div class="item-code">${item.code}</div>
+                            <div class="item-datetime">
+                                📅 ${updateTime.toLocaleDateString('th-TH')} 
+                                🕒 ${updateTime.toLocaleTimeString('th-TH')}
+                            </div>
+                            <div class="item-device">
+                                📱 ${item.lastDevice} 
+                                ${item.action ? `(${getActionText(item.action, item.previousQuantity || 0, item.quantity)})` : ''}
+                            </div>
+                        </div>
+
+                        <div class="${quantityClass}">
+                            ${item.quantity.toLocaleString()} หน่วย
+                        </div>
+
+                        <div style="display: flex; flex-direction: column; gap: 5px;">
+                            <button class="btn btn-primary" onclick="editItem('${item.code}')" style="padding: 8px 16px; font-size: 14px;">
+                                ✏️ แก้ไข
+                            </button>
+                            <button class="btn btn-danger" onclick="deleteItem('${item.code}')" style="padding: 8px 16px; font-size: 14px;">
+                                🗑️ ลบ
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+
+            inventoryItems.innerHTML = html;
+
+            // ลบ highlight หลังจาก 3 วินาที
+            setTimeout(() => {
+                document.querySelectorAll('.new-item').forEach(el => {
+                    el.classList.remove('new-item');
+                });
+            }, 3000);
+        }
+
+        // แปลงการกระทำเป็นข้อความ
+        function getActionText(action, previousQty, currentQty) {
+            const diff = currentQty - previousQty;
+            switch (action) {
+                case 'add': return `+${Math.abs(diff)}`;
+                case 'subtract': return `-${Math.abs(diff)}`;
+                case 'set': return `ตั้งใหม่`;
+                default: return '';
+            }
+        }
+
+        // แก้ไขสินค้า
+        function editItem(productCode) {
+            const item = inventory[productCode];
+            if (!item) return;
+
+            // ใส่ข้อมูลเดิมในฟอร์ม
+            document.getElementById('productCode').value = item.code;
+            document.getElementById('productName').value = item.name;
+            document.getElementById('quantity').value = '1';
+            document.getElementById('action').value = 'set';
+
+            // เลื่อนไปหาฟอร์ม
+            document.getElementById('inputSection').scrollIntoView({ behavior: 'smooth' });
+            document.getElementById('quantity').focus();
+
+            showStatus(`📝 แก้ไขสินค้า: ${item.name}`, 'info');
+        }
+
+        // ลบสินค้า
+        async function deleteItem(productCode) {
+            const item = inventory[productCode];
+            if (!item) return;
+
+            if (!confirm(`ต้องการลบสินค้า "${item.name}" ใช่หรือไม่?`)) {
+                return;
+            }
+
+            try {
+                if (window.firebaseDB && inventoryRef) {
+                    // ลบจาก Firebase
+                    const itemRef = window.firebaseRef(window.firebaseDB, `stores/${currentStoreId}/inventory/${productCode}`);
+                    await window.firebaseRemove(itemRef);
+                } else {
+                    // ลบจาก localStorage
+                    delete inventory[productCode];
+                    localStorage.setItem(`inventory_${currentStoreId}`, JSON.stringify(inventory));
+                    updateDisplay();
+                }
+
+                showStatus(`🗑️ ลบสินค้า "${item.name}" แล้ว`, 'success');
+
+            } catch (error) {
+                console.error('Error deleting item:', error);
+                showStatus('เกิดข้อผิดพลาดในการลบ: ' + error.message, 'error');
+            }
+        }
+
+        // เคลียร์ฟอร์ม
+        function clearForm() {
             document.getElementById('productCode').value = '';
             document.getElementById('productName').value = '';
             document.getElementById('quantity').value = '1';
             document.getElementById('action').value = 'add';
             
-            // กลับไปที่ช่องรหัส
-            setTimeout(() => {
-                document.getElementById('productCode').focus();
-            }, 500);
-            
-            // อัปเดตการแสดงผล
-            updateDisplay();
-        }
-
-        // อัปเดตการแสดงผล
-        function updateDisplay() {
-            const itemsContainer = document.getElementById('inventoryItems');
-            const totalItemsEl = document.getElementById('totalItems');
-            const totalQuantityEl = document.getElementById('totalQuantity');
-            
-            if (Object.keys(inventory).length === 0) {
-                itemsContainer.innerHTML = '<p style="text-align: center; color: #999; padding: 40px; font-size: 18px;">ยังไม่มีสินค้าในรายการ<br><small>เริ่มพิมพ์รหัสสินค้าด้านบนเลย!</small></p>';
-                totalItemsEl.textContent = '0';
-                totalQuantityEl.textContent = '0';
-                return;
-            }
-            
-            let html = '';
-            let totalItems = 0;
-            let totalQuantity = 0;
-            
-            // เรียงตามเวลาอัปเดตล่าสุด
-            const sortedItems = Object.entries(inventory).sort((a, b) => {
-                const timeA = new Date(a[1].lastUpdated || a[1].timestamp);
-                const timeB = new Date(b[1].lastUpdated || b[1].timestamp);
-                return timeB - timeA;
-            });
-            
-            for (const [code, item] of sortedItems) {
-                totalItems++;
-                totalQuantity += item.quantity;
-                
-                html += `
-                    <div class="inventory-item">
-                        <div class="item-info">
-                            <div style="font-size: 1.1em;"><strong>${item.name}</strong></div>
-                            <div class="item-code">${code}</div>
-                            <div class="item-datetime">
-                                📅 เพิ่มเมื่อ: ${item.timestamp}<br>
-                                🔄 อัปเดต: ${item.lastUpdated || item.timestamp}
-                            </div>
-                        </div>
-                        <div class="item-quantity">${item.quantity}</div>
-                        <button class="btn btn-danger" onclick="removeItem('${code}')" style="padding: 8px 15px; font-size: 12px;">❌ ลบ</button>
-                    </div>
-                `;
-            }
-            
-            itemsContainer.innerHTML = html;
-            totalItemsEl.textContent = totalItems;
-            totalQuantityEl.textContent = totalQuantity;
-        }
-
-        // ลบสินค้า
-        function removeItem(code) {
-            if (confirm(`ต้องการลบ "${inventory[code].name}" ใช่หรือไม่?`)) {
-                const itemName = inventory[code].name;
-                delete inventory[code];
-                saveInventoryToStorage();
-                updateDisplay();
-                showStatus(`🗑️ ลบ "${itemName}" แล้ว`, 'info');
-            }
+            // โฟกัสไปที่รหัสสินค้า
+            document.getElementById('productCode').focus();
         }
 
         // ลบข้อมูลทั้งหมด
-        function clearAll() {
-            const itemCount = Object.keys(inventory).length;
-            if (itemCount === 0) {
-                showStatus('ไม่มีข้อมูลให้ลบ', 'info');
+        async function clearAll() {
+            if (!confirm('ต้องการลบข้อมูลทั้งหมดใช่หรือไม่? การกระทำนี้ไม่สามารถยกเลิกได้!')) {
                 return;
             }
-            
-            if (confirm(`ต้องการลบข้อมูลทั้งหมด ${itemCount} รายการใช่หรือไม่?\n\n⚠️ การกระทำนี้จะส่งผลกับทุกเครื่องที่ใช้รหัสร้านเดียวกัน!`)) {
-                inventory = {};
-                saveInventoryToStorage();
-                updateDisplay();
-                showStatus(`🗑️ ลบข้อมูลทั้งหมด ${itemCount} รายการแล้ว`, 'success');
-                document.getElementById('productCode').focus();
+
+            try {
+                if (window.firebaseDB && inventoryRef) {
+                    // ลบทั้งหมดจาก Firebase
+                    await window.firebaseRemove(inventoryRef);
+                } else {
+                    // ลบจาก localStorage
+                    inventory = {};
+                    localStorage.removeItem(`inventory_${currentStoreId}`);
+                    updateDisplay();
+                }
+
+                showStatus('🗑️ ลบข้อมูลทั้งหมดแล้ว', 'success');
+
+            } catch (error) {
+                console.error('Error clearing all:', error);
+                showStatus('เกิดข้อผิดพลาดในการลบ: ' + error.message, 'error');
             }
         }
 
-        // แสดงข้อความสถานะ
-        function showStatus(message, type) {
-            const statusEl = document.getElementById('statusMessage');
-            statusEl.innerHTML = `<div class="status ${type}">${message}</div>`;
-            
-            setTimeout(() => {
-                statusEl.innerHTML = '';
-            }, 4000);
-        }
-
-        // ส่งออกข้อมูลเป็น CSV
+        // ส่งออกข้อมูล CSV
         function exportData() {
-            if (Object.keys(inventory).length === 0) {
+            const items = Object.values(inventory);
+            
+            if (items.length === 0) {
                 showStatus('ไม่มีข้อมูลให้ส่งออก', 'error');
                 return;
             }
+
+            // สร้าง CSV
+            let csv = 'รหัสสินค้า,ชื่อสินค้า,จำนวน,วันที่อัปเดต,เครื่องที่อัปเดต\n';
             
-            let csv = 'รหัสสินค้า,ชื่อสินค้า,จำนวน,วันเวลาที่เพิ่ม,วันเวลาอัปเดตล่าสุด\n';
-            
-            for (const [code, item] of Object.entries(inventory)) {
-                csv += `"${code}","${item.name}","${item.quantity}","${item.timestamp}","${item.lastUpdated || item.timestamp}"\n`;
-            }
-            
+            items.forEach(item => {
+                const date = new Date(item.lastUpdated).toLocaleString('th-TH');
+                csv += `"${item.code}","${item.name}","${item.quantity}","${date}","${item.lastDevice || 'ไม่ทราบ'}"\n`;
+            });
+
+            // ดาวน์โหลดไฟล์
             const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement('a');
             const url = URL.createObjectURL(blob);
-            const now = new Date();
-            const fileName = `สินค้า_${currentStoreId}_${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2,'0')}-${now.getDate().toString().padStart(2,'0')}_${now.getHours().toString().padStart(2,'0')}-${now.getMinutes().toString().padStart(2,'0')}.csv`;
             
             link.setAttribute('href', url);
-            link.setAttribute('download', fileName);
+            link.setAttribute('download', `inventory_${currentStoreId}_${new Date().toISOString().split('T')[0]}.csv`);
             link.style.visibility = 'hidden';
+            
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            
-            showStatus(`💾 ดาวน์โหลดไฟล์ "${fileName}" สำเร็จ`, 'success');
+
+            showStatus('📤 ส่งออกข้อมูล CSV สำเร็จ', 'success');
         }
 
         // พิมพ์รายงาน
         function printData() {
-            if (Object.keys(inventory).length === 0) {
+            const items = Object.values(inventory);
+            
+            if (items.length === 0) {
                 showStatus('ไม่มีข้อมูลให้พิมพ์', 'error');
                 return;
             }
+
+            // สร้างหน้าต่างใหม่สำหรับพิมพ์
+            const printWindow = window.open('', '_blank');
             
-            const now = new Date();
-            const printTime = now.toLocaleString('th-TH', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-            
-            let totalQuantity = 0;
-            let tableRows = '';
-            
-            // เรียงตามชื่อสินค้า
-            const sortedItems = Object.entries(inventory).sort((a, b) => 
-                a[1].name.localeCompare(b[1].name, 'th')
-            );
-            
-            for (const [code, item] of sortedItems) {
-                totalQuantity += item.quantity;
-                tableRows += `
-                    <tr>
-                        <td>${code}</td>
-                        <td>${item.name}</td>
-                        <td style="text-align: center;">${item.quantity}</td>
-                        <td>${item.timestamp}</td>
-                        <td>${item.lastUpdated || item.timestamp}</td>
-                    </tr>
-                `;
-            }
-            
-            const printContent = `
+            let html = `
                 <!DOCTYPE html>
-                <html lang="th">
+                <html>
                 <head>
                     <meta charset="UTF-8">
                     <title>รายงานสินค้า - ${currentStoreId}</title>
                     <style>
-                        @page { margin: 20mm; }
-                        body { 
-                            font-family: 'Sarabun', Arial, sans-serif; 
-                            font-size: 12px;
-                            line-height: 1.4;
-                        }
-                        .header {
-                            text-align: center;
-                            border-bottom: 2px solid #333;
-                            padding-bottom: 15px;
-                            margin-bottom: 20px;
-                        }
-                        .header h1 {
-                            margin: 0;
-                            font-size: 24px;
-                            color: #333;
-                        }
-                        .header p {
-                            margin: 5px 0;
-                            color: #666;
-                        }
-                        table { 
-                            width: 100%; 
-                            border-collapse: collapse; 
-                            margin-top: 15px;
-                        }
-                        th, td { 
-                            border: 1px solid #ddd; 
-                            padding: 8px; 
-                            text-align: left; 
-                            vertical-align: top;
-                        }
-                        th { 
-                            background-color: #f8f9fa; 
-                            font-weight: bold;
-                            text-align: center;
-                        }
-                        tr:nth-child(even) {
-                            background-color: #f9f9f9;
-                        }
-                        .summary {
-                            margin-top: 20px;
-                            padding: 15px;
-                            background-color: #e9ecef;
-                            border-radius: 5px;
-                        }
-                        .summary h3 {
-                            margin: 0 0 10px 0;
-                            color: #495057;
-                        }
-                        .footer {
-                            margin-top: 30px;
-                            text-align: center;
-                            color: #666;
-                            font-size: 10px;
-                            border-top: 1px solid #ddd;
-                            padding-top: 10px;
+                        body { font-family: 'Sarabun', Arial, sans-serif; margin: 20px; }
+                        .header { text-align: center; margin-bottom: 30px; }
+                        .info { margin-bottom: 20px; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+                        th { background-color: #f2f2f2; font-weight: bold; }
+                        .summary { margin-top: 30px; padding: 15px; background-color: #f8f9fa; border-radius: 5px; }
+                        @media print {
+                            .no-print { display: none; }
                         }
                     </style>
                 </head>
                 <body>
                     <div class="header">
                         <h1>📊 รายงานสินค้า</h1>
-                        <p><strong>รหัสร้าน:</strong> ${currentStoreId}</p>
-                        <p><strong>วันที่พิมพ์:</strong> ${printTime}</p>
+                        <h2>ร้าน: ${currentStoreId}</h2>
+                    </div>
+                    
+                    <div class="info">
+                        <p><strong>วันที่พิมพ์:</strong> ${new Date().toLocaleString('th-TH')}</p>
+                        <p><strong>พิมพ์โดย:</strong> ${currentDeviceName}</p>
+                        <p><strong>จำนวนรายการ:</strong> ${items.length} รายการ</p>
+                        <p><strong>จำนวนสินค้ารวม:</strong> ${items.reduce((sum, item) => sum + item.quantity, 0).toLocaleString()} หน่วย</p>
                     </div>
                     
                     <table>
                         <thead>
                             <tr>
-                                <th width="15%">รหัสสินค้า</th>
-                                <th width="30%">ชื่อสินค้า</th>
-                                <th width="10%">จำนวน</th>
-                                <th width="20%">วันเวลาที่เพิ่ม</th>
-                                <th width="25%">อัปเดตล่าสุด</th>
+                                <th>ลำดับ</th>
+                                <th>รหัสสินค้า</th>
+                                <th>ชื่อสินค้า</th>
+                                <th>จำนวน</th>
+                                <th>วันที่อัปเดตล่าสุด</th>
+                                <th>อัปเดตโดย</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${tableRows}
+            `;
+
+            items.sort((a, b) => a.name.localeCompare(b.name, 'th')).forEach((item, index) => {
+                const date = new Date(item.lastUpdated).toLocaleString('th-TH');
+                html += `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>${item.code}</td>
+                        <td>${item.name}</td>
+                        <td style="text-align: right;">${item.quantity.toLocaleString()}</td>
+                        <td>${date}</td>
+                        <td>${item.lastDevice || 'ไม่ทราบ'}</td>
+                    </tr>
+                `;
+            });
+
+            html += `
                         </tbody>
                     </table>
                     
                     <div class="summary">
-                        <h3>📈 สรุปผล</h3>
-                        <p><strong>จำนวนรายการทั้งหมด:</strong> ${Object.keys(inventory).length} รายการ</p>
-                        <p><strong>จำนวนสินค้ารวม:</strong> ${totalQuantity} ชิ้น</p>
-                        <p><strong>รหัสร้าน:</strong> ${currentStoreId}</p>
+                        <h3>สรุป</h3>
+                        <p>รายการสินค้าทั้งหมด: <strong>${items.length}</strong> รายการ</p>
+                        <p>จำนวนสินค้ารวมทั้งหมด: <strong>${items.reduce((sum, item) => sum + item.quantity, 0).toLocaleString()}</strong> หน่วย</p>
+                        <p>สินค้าที่หมดสต็อก: <strong>${items.filter(item => item.quantity === 0).length}</strong> รายการ</p>
+                        <p>สินค้าที่เหลือน้อย (< 10): <strong>${items.filter(item => item.quantity < 10 && item.quantity > 0).length}</strong> รายการ</p>
                     </div>
                     
-                    <div class="footer">
-                        <p>รายงานสร้างโดยระบบนับสินค้าอัตโนมัติ | สร้างเมื่อ ${printTime}</p>
+                    <div class="no-print" style="margin-top: 30px; text-align: center;">
+                        <button onclick="window.print()" style="padding: 10px 20px; font-size: 16px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">🖨️ พิมพ์</button>
+                        <button onclick="window.close()" style="padding: 10px 20px; font-size: 16px; background: #6c757d; color: white; border: none; border-radius: 5px; cursor: pointer; margin-left: 10px;">❌ ปิด</button>
                     </div>
                 </body>
                 </html>
             `;
-            
-            const printWindow = window.open('', '_blank');
-            printWindow.document.write(printContent);
+
+            printWindow.document.write(html);
             printWindow.document.close();
-            printWindow.focus();
-            
-            setTimeout(() => {
-                printWindow.print();
-                showStatus('🖨️ เปิดหน้าต่างพิมพ์แล้ว', 'success');
-            }, 500);
+
+            showStatus('🖨️ เปิดหน้าต่างพิมพ์แล้ว', 'success');
         }
 
-        // ฟัง storage events สำหรับการซิงค์
-        window.addEventListener('storage', (e) => {
-            if (e.key && e.key.startsWith('update_signal_' + currentStoreId)) {
-                refreshData(false); // รีเฟรชเงียบๆ
+        // อัปเดตข้อมูลผู้ใช้ออนไลน์ทุก 30 วินาที
+        setInterval(async () => {
+            if (onlineUsersRef && window.firebaseDB) {
+                try {
+                    await window.firebaseSet(onlineUsersRef, {
+                        name: currentDeviceName,
+                        deviceId: deviceId,
+                        lastSeen: window.firebaseServerTimestamp(),
+                        userAgent: navigator.userAgent.substring(0, 50)
+                    });
+                } catch (error) {
+                    console.log('Failed to update online status:', error);
+                }
             }
-        });
+        }, 30000);
+
     </script>
 </body>
 </html>
