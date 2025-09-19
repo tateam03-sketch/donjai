@@ -672,8 +672,8 @@
                         <span>✅ บันทึก: ${item.timestamp}</span>
                     </div>
                     <div class="item-actions">
-                        <button class="action-btn delete-btn-small" onclick="deleteItem(${index})">
-                            🗑️ ลบทั้งระบบและ Google Sheets
+                        <button class="action-btn delete-btn-small" onclick="confirmDelete(${index})">
+                            🗑️ ลบ
                         </button>
                     </div>
                 </div>
@@ -783,14 +783,19 @@
             document.getElementById('editModal').style.display = 'none';
         }
 
+        // ฟังก์ชันยืนยันการลบ
+        function confirmDelete(index) {
+            const item = inventory[index];
+            
+            if (confirm(`คุณต้องการลบ "${item.productName}" ใช่หรือไม่?\n\nรหัสบาร์โค้ด: ${item.barcode}\nราคา: ${item.price} บาท\nจำนวน: ${item.quantity} ชิ้น\n\nข้อมูลจะถูกลบทั้งในระบบและ Google Sheets`)) {
+                deleteItem(index);
+            }
+        }
+
         // ฟังก์ชันลบสินค้า
         async function deleteItem(index) {
             const item = inventory[index];
             
-            if (!confirm(`คุณต้องการลบ "${item.productName}" ใช่หรือไม่?\n\nรหัสบาร์โค้ด: ${item.barcode}\nราคา: ${item.price} บาท\nจำนวน: ${item.quantity} ชิ้น\n\nข้อมูลจะถูกลบทั้งในระบบและ Google Sheets`)) {
-                return;
-            }
-
             try {
                 console.log('Deleting item:', item); // Debug log
                 
