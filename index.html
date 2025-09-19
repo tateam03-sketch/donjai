@@ -735,6 +735,13 @@
             };
 
             try {
+                console.log('Form data before sending:', {
+                    barcode: barcode,
+                    productName: productName,
+                    quantity: quantity,
+                    price: price
+                });
+
                 // ส่งไป Google Sheets
                 await sendToSheets(newItem, 'add');
                 
@@ -743,7 +750,7 @@
                 successCount++;
                 
                 // แสดงผลสำเร็จ
-                showSuccess(`✅ บันทึก "${productName}" ไป Google Sheets เรียบร้อย!`);
+                showSuccess(`✅ บันทึก "${productName}" ไป Google Sheets เรียบร้อย! (ราคา: ${price} บาท)`);
                 
                 // เคลียร์ฟอร์ม
                 this.reset();
