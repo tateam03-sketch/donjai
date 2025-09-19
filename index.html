@@ -234,8 +234,8 @@
 
         .stats {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 20px;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
             margin-bottom: 30px;
         }
 
@@ -318,7 +318,7 @@
             }
 
             .stats {
-                grid-template-columns: 1fr;
+                grid-template-columns: repeat(2, 1fr);
             }
         }
 
@@ -484,7 +484,7 @@
                         <p><strong>ขั้นตอนการเชื่อมต่อ:</strong></p>
                         <ol>
                             <li>เปิด <a href="https://sheets.google.com" target="_blank">Google Sheets</a> สร้างชีทใหม่</li>
-                            <li>ตั้งชื่อ Column A1=รหัสบาร์โค้ด, B1=ชื่อสินค้า, C1=จำนวน, D1=เวลาบันทึก</li>
+                            <li>ตั้งชื่อ Column A1=รหัสบาร์โค้ด, B1=ชื่อสินค้า, C1=จำนวน, D1=ราคาขาย, E1=เวลาบันทึก</li>
                             <li>ไปที่ Extensions → Apps Script</li>
                             <li>วาง Code ด้านล่างแล้ว Deploy เป็น Web App</li>
                             <li>คัดลอก URL มาใส่ในช่องด้านล่าง</li>
@@ -522,6 +522,11 @@
                         <input type="number" id="quantity" name="quantity" placeholder="จำนวนสินค้า" min="0" required>
                     </div>
 
+                    <div class="form-group">
+                        <label for="price">💰 ราคาขาย (บาท)</label>
+                        <input type="number" id="price" name="price" placeholder="ราคาขาย" min="0" step="0.01" required>
+                    </div>
+
                     <button type="submit" class="btn" id="saveBtn">
                         💾 บันทึกไป Google Sheets
                     </button>
@@ -539,6 +544,10 @@
                     <div class="stat-card">
                         <div class="stat-number" id="totalQuantity">0</div>
                         <div class="stat-label">จำนวนทั้งหมด</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="totalValue">0</div>
+                        <div class="stat-label">มูลค่ารวม (บาท)</div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-number" id="successCount">0</div>
@@ -577,6 +586,10 @@
                             <div class="form-group">
                                 <label for="editQuantity">📊 จำนวน</label>
                                 <input type="number" id="editQuantity" min="0" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="editPrice">💰 ราคาขาย (บาท)</label>
+                                <input type="number" id="editPrice" min="0" step="0.01" required>
                             </div>
                             <div class="modal-actions">
                                 <button type="button" class="btn btn-secondary" onclick="closeEditModal()">ยกเลิก</button>
@@ -677,6 +690,14 @@
                     </div>
                     <div class="item-details">
                         <span class="barcode">${item.barcode}</span>
+                        <span style="background: #f0f9ff; color: #0369a1; padding: 4px 8px; border-radius: 4px; font-weight: 600; margin-left: 10px;">
+                            💰 ${item.price.toLocaleString()} บาท/ชิ้น
+                        </span>
+                        <span style="background: #f0fdf4; color: #166534; padding: 4px 8px; border-radius: 4px; font-weight: 600; margin-left: 5px;">
+                            💎 รวม ${(item.quantity * item.price).toLocaleString()} บาท
+                        </span>
+                    </div>
+                    <div class="item-details" style="margin-top: 5px;">
                         <span>✅ อัปเดต: ${item.timestamp}</span>
                     </div>
                     <div class="item-actions">
@@ -725,8 +746,9 @@
             const barcode = document.getElementById('barcode').value.trim();
             const productName = document.getElementById('productName').value.trim();
             const quantity = parseInt(document.getElementById('quantity').value);
+            const price = parseFloat(document.getElementById('price').value);
 
-            if (!barcode || !productName || quantity < 0) {
+            if (!barcode || !productName || quantity < 0 || price < 0) {
                 showError('กรุณากรอกข้อมูลให้ครบถ้วนและถูกต้อง');
                 return;
             }
@@ -740,6 +762,7 @@
                 barcode: barcode,
                 productName: productName,
                 quantity: quantity,
+                price: price,
                 timestamp: new Date().toLocaleString('th-TH')
             };
 
@@ -778,6 +801,7 @@
             document.getElementById('editBarcode').value = item.barcode;
             document.getElementById('editProductName').value = item.productName;
             document.getElementById('editQuantity').value = item.quantity;
+            document.getElementById('editPrice').value = item.price;
             
             // เก็บ index สำหรับใช้ตอนบันทึก
             document.getElementById('editForm').setAttribute('data-index', index);
@@ -795,11 +819,13 @@
         async function deleteItem(index) {
             const item = inventory[index];
             
-            if (!confirm(`คุณต้องการลบ "${item.productName}" ใช่หรือไม่?\n\nข้อมูลจะถูกลบทั้งในระบบและ Google Sheets`)) {
+            if (!confirm(`คุณต้องการลบ "${item.productName}" ใช่หรือไม่?\n\nรหัสบาร์โค้ด: ${item.barcode}\nข้อมูลจะถูกลบทั้งในระบบและ Google Sheets`)) {
                 return;
             }
 
             try {
+                console.log('Deleting item:', item); // Debug log
+                
                 // ส่งคำสั่งลบไป Google Sheets
                 await sendToSheets(item, 'delete');
                 
@@ -810,9 +836,10 @@
                 displayInventory();
                 updateStats();
                 
-                showSuccess(`✅ ลบ "${item.productName}" เรียบร้อยแล้ว`);
+                showSuccess(`✅ ลบ "${item.productName}" (${item.barcode}) เรียบร้อยแล้ว`);
                 
             } catch (error) {
+                console.error('Delete error:', error); // Debug log
                 showError('❌ เกิดข้อผิดพลาดในการลบ: ' + error.message);
             }
         }
@@ -826,21 +853,29 @@
             
             const newProductName = document.getElementById('editProductName').value.trim();
             const newQuantity = parseInt(document.getElementById('editQuantity').value);
+            const newPrice = parseFloat(document.getElementById('editPrice').value);
             
-            if (!newProductName || newQuantity < 0) {
+            if (!newProductName || newQuantity < 0 || newPrice < 0) {
                 showError('กรุณากรอกข้อมูลให้ถูกต้อง');
                 return;
             }
 
             const updatedItem = {
-                barcode: originalItem.barcode,
-                productName: newProductName,
-                quantity: newQuantity,
+                barcode: originalItem.barcode,        // รหัสบาร์โค้ดใหม่ (ไม่เปลี่ยน)
+                productName: newProductName,          // ชื่อสินค้าใหม่
+                quantity: newQuantity,                // จำนวนใหม่
+                price: newPrice,                      // ราคาใหม่
                 timestamp: new Date().toLocaleString('th-TH'),
-                originalBarcode: originalItem.barcode
+                originalBarcode: originalItem.barcode // รหัสบาร์โค้ดเดิมสำหรับหา record ใน Sheets
             };
 
             try {
+                // แสดงสถานะกำลังแก้ไข
+                const submitBtn = this.querySelector('button[type="submit"]');
+                const originalBtnText = submitBtn.innerHTML;
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '🔄 กำลังแก้ไข...';
+
                 // ส่งข้อมูลที่แก้ไขไป Google Sheets
                 await sendToSheets(updatedItem, 'edit');
                 
@@ -856,6 +891,10 @@
                 
             } catch (error) {
                 showError('❌ เกิดข้อผิดพลาดในการแก้ไข: ' + error.message);
+            } finally {
+                const submitBtn = this.querySelector('button[type="submit"]');
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalBtnText;
             }
         });
 
@@ -895,6 +934,13 @@
         });
 
         document.getElementById('quantity').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                document.getElementById('price').focus();
+            }
+        });
+
+        document.getElementById('price').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 document.getElementById('inventoryForm').requestSubmit();
