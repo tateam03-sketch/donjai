@@ -567,36 +567,7 @@
                     </div>
                 </div>
 
-                <!-- Modal สำหรับแก้ไขข้อมูล -->
-                <div class="modal" id="editModal">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h3>✏️ แก้ไขข้อมูลสินค้า</h3>
-                            <button class="close-btn" onclick="closeEditModal()">&times;</button>
-                        </div>
-                        <form id="editForm">
-                            <div class="form-group">
-                                <label for="editBarcode">🔍 รหัสบาร์โค้ด</label>
-                                <input type="text" id="editBarcode" readonly>
-                            </div>
-                            <div class="form-group">
-                                <label for="editProductName">🏷️ ชื่อสินค้า</label>
-                                <input type="text" id="editProductName" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="editQuantity">📊 จำนวน</label>
-                                <input type="number" id="editQuantity" min="0" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="editPrice">💰 ราคาขาย (บาท)</label>
-                                <input type="number" id="editPrice" min="0" step="0.01" required>
-                            </div>
-                            <div class="modal-actions">
-                                <button type="button" class="btn btn-secondary" onclick="closeEditModal()">ยกเลิก</button>
-                                <button type="submit" class="btn">💾 บันทึกการแก้ไข</button>
-                            </div>
-                        </form>
-                    </div>
+                <!-- Modal สำหรับแก้ไขข้อมูล - ลบออก -->
                 </div>
             </div>
         </div>
@@ -698,14 +669,11 @@
                         </span>
                     </div>
                     <div class="item-details" style="margin-top: 5px;">
-                        <span>✅ อัปเดต: ${item.timestamp}</span>
+                        <span>✅ บันทึก: ${item.timestamp}</span>
                     </div>
                     <div class="item-actions">
-                        <button class="action-btn edit-btn" onclick="editItem(${index})">
-                            ✏️ แก้ไข
-                        </button>
                         <button class="action-btn delete-btn-small" onclick="deleteItem(${index})">
-                            🗑️ ลบ
+                            🗑️ ลบทั้งระบบและ Google Sheets
                         </button>
                     </div>
                 </div>
@@ -819,7 +787,7 @@
         async function deleteItem(index) {
             const item = inventory[index];
             
-            if (!confirm(`คุณต้องการลบ "${item.productName}" ใช่หรือไม่?\n\nรหัสบาร์โค้ด: ${item.barcode}\nข้อมูลจะถูกลบทั้งในระบบและ Google Sheets`)) {
+            if (!confirm(`คุณต้องการลบ "${item.productName}" ใช่หรือไม่?\n\nรหัสบาร์โค้ด: ${item.barcode}\nราคา: ${item.price} บาท\nจำนวน: ${item.quantity} ชิ้น\n\nข้อมูลจะถูกลบทั้งในระบบและ Google Sheets`)) {
                 return;
             }
 
@@ -836,7 +804,7 @@
                 displayInventory();
                 updateStats();
                 
-                showSuccess(`✅ ลบ "${item.productName}" (${item.barcode}) เรียบร้อยแล้ว`);
+                showSuccess(`✅ ลบ "${item.productName}" (${item.barcode}) เรียบร้อยแล้วทั้งในระบบและ Google Sheets`);
                 
             } catch (error) {
                 console.error('Delete error:', error); // Debug log
@@ -898,13 +866,7 @@
             }
         });
 
-        // ปิด Modal เมื่อคลิกนอก Modal
-        window.onclick = function(event) {
-            const modal = document.getElementById('editModal');
-            if (event.target === modal) {
-                closeEditModal();
-            }
-        }
+        // ปิด Modal เมื่อคลิกนอก Modal - ลบออกเพราะไม่มี Modal แล้ว
 
         // โหลด URL จาก localStorage เมื่อเริ่มต้น
         document.addEventListener('DOMContentLoaded', function() {
